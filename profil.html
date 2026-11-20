@@ -56,7 +56,7 @@
         const ligne = document.createElement("div");
         const image = document.createElement("img");
         image.src = "https://www.bungie.net" + definition.displayProperties.icon;
-        image.width = 48;
+        image.wth = 48;
         const texte = document.createElement("span");
         texte.textContent = " " + emplacement + " : " + definition.displayProperties.name;
 
@@ -78,8 +78,8 @@
         try {
           memberships = await appelerBungie("/User/GetMembershipsForCurrentUser/");
         } catch (erreur) {
-          // Solution de secours : on utilise l'identifiant reçu à la connexion
-          const membershipId = sessionStorage.getItem("membershipId");
+          // Solution de secours : on utilise l'entifiant reçu à la connexion
+          const membership = sessionStorage.getItem("membershipId");
           memberships = await appelerBungie("/User/GetMembershipsById/" + membershipId + "/-1/");
         }
 
