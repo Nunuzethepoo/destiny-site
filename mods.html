@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Mods de l'armure équipée</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .piece { border: 1px solid #aaa; border-radius: 8px; padding: 10px; margin: 12px 0; }
+    .piece h3 { display: flex; align-items: center; margin: 0 0 8px 0; }
+    .piece h3 img { width: 40px; height: 40px; margin-right: 10px; }
+    .prise { margin: 6px 0; }
+    .energie { color: #555; }
+    pre { background: #f3f3f3; padding: 10px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Mods de l'armure équipée</h1>
+  <p>À faire en orbite, à la tour ou hors ligne. Équipe d'abord ton set, puis choisis les mods ici.</p>
+  <p id="statut">Chargement...</p>
+
+  <p>Personnage :
+    <select id="choixPersonnage"></select>
+    <button id="afficher">Afficher ses pièces</button>
+  </p>
+
+  <div id="pieces"></div>
+  <p><button id="appliquer" style="display:none">Appliquer les changements</button></p>
+
+  <h2>Journal</h2>
+  <pre id="journal">(vide)</pre>
+
+  <p><a href="equiper.html">Équiper un set</a> | <a href="profil.html">Profil</a></p>
+
+  <script>
+    const CLE_API = "8f0fe7144bbc4fdda21ed3a26889aecb";
+    const jeton = sessionStorage.getItem("jeton");
+
+    const statut = document.getElementById("statut");
+    const choixPersonnage = document.getElementById("choixPersonnage");
+    const zonePieces = document.getElementById("pieces");
+    const boutonAppliquer = document.getElementById("appliquer");
+    const zoneJournal = document.getElementById("journal");
+
+    const CLASSES = { 0: "Titan", 1: "Chasseur", 2: "Arcaniste" };
+    const EMPLACEMENTS_ARMURE = {
+      3448274439: "Casque",
+      3551918588: "Gants",
+      14239492: "Torse",
+      20886954: "Jambes",
+      1585787867: "Objet de classe"
+    };
+    const ORDRE = ["Casque", "Gants", "Torse", "Jambes", "Objet de classe"];
+
+    let compte = null;
+    let profil = null;
+    let selections = []; // une entrée par prise de mod affichée
+
+    // ---------- Le journal ----------
+    function viderJournal() {
+      zoneJournal.textContent = "";
+    }
+    function ecrire(texte) {
+      if (zoneJournal.textContent === "(vide)") {
+        zoneJournal.textContent = "";
+      }
+      zoneJournal.textContent += texte + "\n";
+    }
+    function pause(ms) {
+      return new Promise(function (resolve) {
+        setTimeout(resolve, ms);
+      });
+    }
+
+    // ---------- Parler à Bungie ----------
+    async function appelerBungie(chemin) {
+      const reponse = await fetch("https://www.bungie.net/Platform" + chemin, {
+        headers: { "X-API-Key": CLE_API, "Authorization": "Bearer " + jeton }
+      });
+      const donnees = await reponse.json();
+      if (donnees.ErrorStatus !== "Success") {
+        throw new Error(donnees.ErrorStatus + " - " + donnees.Message);
+      }
+      return donnees.Response;
+    }
+
+    async function envoyerBungie(chemin, corps) {
+      const reponse = await fetch("https://www.bungie.net/Platform" + chemin, {
+        method: "POST",
+        headers: {
+          "X-API-Key": CLE_API,
+          "Authorization": "Bearer " + jeton,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(corps)
+      });
+      const donnees = await reponse.json();
+      if (donnees.ErrorStatus !== "Success") {
+        throw new Error(donnees.ErrorStatus + " - " + donnees.Message);
+      }
+      return donnees.Response;
+    }
+
+    // ---------- Les définitions (demandées une par une, puis gardées en mémoire) ----------
+
+    // Un mod : nom, icône, catégorie, coût d'énergie
+    async function definitionPlug(hash) {
+      const cle = "defPlug_" + hash;
+      const enMemoire = localStorage.getItem(cle);
+      if (enMemoire) {
+        return JSON.parse(enMemoire);
+      }
+
+      const def = await appelerBungie("/Destiny2/Manifest/DestinyInventoryItemDefinition/" + hash + "/");
+      const infos = {
+        nom: def.displayProperties.name || "(sans nom)",
+        icone: def.displayProperties.icon || "",
+        categorie: def.plug ? def.plug.plugCategoryIdentifier : "",
+        energie: def.plug && def.plug.energyCost ? def.plug.energyCost.energyCost : 0
+      };
+      localStorage.setItem(cle, JSON.stringify(infos));
+      return infos;
+    }
+
+    // Une pièce d'armure : nom, icône, et la définition de ses prises
+    async function definitionObjet(hash) {
+      const def = await appelerBungie("/Destiny2/Manifest/DestinyInventoryItemDefinition/" + hash + "/");
+      return {
+        nom: def.displayProperties.name,
+        icone: def.displayProperties.icon,
+        entrees: def.sockets ? def.sockets.socketEntries : []
+      };
+    }
+
+    // Les mods possédés pour une prise : profil + personnage, sans doublons
+    function plugsPossedes(hashSet, idPerso) {
+      const sources = [];
+
+      const duProfil = profil.profilePlugSets && profil.profilePlugSets.data &&
+                       profil.profilePlugSets.data.plugs[hashSet];
+      if (duProfil) { sources.push(duProfil); }
+
+      const duPerso = profil.characterPlugSets && profil.characterPlugSets.data &&
+                      profil.characterPlugSets.data[idPerso] &&
+                      profil.characterPlugSets.data[idPerso].plugs[hashSet];
+      if (duPerso) { sources.push(duPerso); }
+
+      const vus = {};
+      const resultat = [];
+      for (const liste of sources) {
+        for (const plug of liste) {
+          if (plug.canInsert && plug.enabled && !vus[plug.plugItemHash]) {
+            vus[plug.plugItemHash] = true;
+            resultat.push(plug.plugItemHash);
+          }
+        }
+      }
+      return resultat;
+    }
+
+    // ---------- L'affichage d'une pièce ----------
+    async function afficherPiece(objet, idPerso) {
+      const infos = await definitionObjet(objet.itemHash);
+      const emplacement = EMPLACEMENTS_ARMURE[objet.bucketHash];
+      const prises = profil.itemComponents.sockets.data[objet.itemInstanceId].sockets;
+      const instance = profil.itemComponents.instances && profil.itemComponents.instances.data[objet.itemInstanceId];
+      const capacite = instance && instance.energy ? instance.energy.energyCapacity : null;
+
+      const bloc = document.createElement("div");
+      bloc.className = "piece";
+
+      const titre = document.createElement("h3");
+      const image = document.createElement("img");
+      image.src = "https://www.bungie.net" + infos.icone;
+      titre.appendChild(image);
+      titre.appendChild(document.createTextNode(emplacement + " : " + infos.nom));
+      bloc.appendChild(titre);
+
+      const zoneEnergie = document.createElement("p");
+      zoneEnergie.className = "energie";
+
+      const prisesDeLaPiece = [];
+
+      function majEnergie() {
+        let total = 0;
+        for (const s of prisesDeLaPiece) {
+          const choisi = s.options.find(function (o) {
+            return String(o.hash) === s.select.value;
+          });
+          total += choisi ? choisi.infos.energie : 0;
+        }
+        zoneEnergie.textContent =
+          "Énergie des mods choisis (estimation) : " + total + (capacite ? " / " + capacite : "");
+      }
+
+      for (let index = 0; index < prises.length; index++) {
+        const entree = infos.entrees[index];
+        const prise = prises[index];
+
+        // Seules les prises avec un « plug set » et un mod actuel nous intéressent
+        if (!entree || !entree.reusablePlugSetHash || !prise.plugHash) {
+          continue;
+        }
+
+        const actuel = await definitionPlug(prise.plugHash);
+        if (actuel.categorie.indexOf("enhancements") === -1) {
+          continue; // ce n'est pas une prise de mods
+        }
+
+        // La liste des mods possédés, plus le mod actuel au cas où
+        const hashs = plugsPossedes(entree.reusablePlugSetHash, idPerso);
+        if (hashs.indexOf(prise.plugHash) === -1) {
+          hashs.push(prise.plugHash);
+        }
+
+        const options = [];
+        for (const hash of hashs) {
+          options.push({ hash: hash, infos: await definitionPlug(hash) });
+        }
+        options.sort(function (a, b) {
+          return a.infos.nom.localeCompare(b.infos.nom);
+        });
+
+        const select = document.createElement("select");
+        for (const option of options) {
+          const element = document.createElement("option");
+          element.value = option.hash;
+          element.textContent =
+            option.infos.nom + (option.infos.energie ? " (énergie " + option.infos.energie + ")" : "");
+          if (option.hash === prise.plugHash) {
+            element.selected = true;
+          }
+          select.appendChild(element);
+        }
+        select.addEventListener("change", majEnergie);
+
+        const ligne = document.createElement("div");
+        ligne.className = "prise";
+        ligne.appendChild(document.createTextNode(
+          "Prise " + index + " (" + actuel.categorie.replace("enhancements.", "") + ") : "
+        ));
+        ligne.appendChild(select);
+        bloc.appendChild(ligne);
+
+        const entreeSelection = {
+          nomPiece: infos.nom,
+          objet: objet,
+          idPerso: idPerso,
+          index: index,
+          select: select,
+          options: options,
+          actuel: prise.plugHash
+        };
+        prisesDeLaPiece.push(entreeSelection);
+        selections.push(entreeSelection);
+      }
+
+      if (prisesDeLaPiece.length === 0) {
+        const aucune = document.createElement("p");
+        aucune.textContent = "Aucune prise de mod modifiable sur cette pièce.";
+        bloc.appendChild(aucune);
+      } else {
+        bloc.appendChild(zoneEnergie);
+        majEnergie();
+      }
+
+      zonePieces.appendChild(bloc);
+    }
+
+    async function afficherPieces() {
+      zonePieces.innerHTML = "";
+      selections = [];
+      boutonAppliquer.style.display = "none";
+
+      const idPerso = choixPersonnage.value;
+      const equipement = profil.characterEquipment.data[idPerso].items
+        .filter(function (objet) { return EMPLACEMENTS_ARMURE[objet.bucketHash]; })
+        .sort(function (a, b) {
+          return ORDRE.indexOf(EMPLACEMENTS_ARMURE[a.bucketHash]) -
+                 ORDRE.indexOf(EMPLACEMENTS_ARMURE[b.bucketHash]);
+        });
+
+      try {
+        let numero = 0;
+        for (const objet of equipement) {
+          numero++;
+          statut.textContent = "Chargement de la pièce " + numero + " sur " + equipement.length + "...";
+          await afficherPiece(objet, idPerso);
+        }
+        statut.textContent = "Choisis tes mods, puis clique sur « Appliquer les changements ».";
+        boutonAppliquer.style.display = "inline";
+      } catch (erreur) {
+        statut.textContent = "Erreur : " + erreur.message;
+      }
+    }
+
+    // ---------- L'envoi des changements ----------
+    function coutChoisi(s) {
+      const choisi = s.options.find(function (o) {
+        return String(o.hash) === s.select.value;
+      });
+      return choisi ? choisi.infos.energie : 0;
+    }
+
+    async function appliquer() {
+      viderJournal();
+
+      const changements = selections.filter(function (s) {
+        return String(s.actuel) !== s.select.value;
+      });
+      if (changements.length === 0) {
+        ecrire("Aucun changement à appliquer.");
+        return;
+      }
+
+      // On commence par les mods les moins chers (et les emplacements vidés)
+      // pour libérer de l'énergie avant d'en demander davantage
+      changements.sort(function (a, b) {
+        return coutChoisi(a) - coutChoisi(b);
+      });
+
+      boutonAppliquer.disabled = true;
+
+      for (const s of changements) {
+        const choisi = s.options.find(function (o) {
+          return String(o.hash) === s.select.value;
+        });
+        ecrire(s.nomPiece + ", prise " + s.index + " : « " + choisi.infos.nom + " »...");
+
+        try {
+          const reponse = await envoyerBungie("/Destiny2/Actions/Items/InsertSocketPlugFree/", {
+            plug: {
+              socketIndex: s.index,
+              socketArrayType: 0,
+              plugItemHash: Number(s.select.value)
+            },
+            itemId: s.objet.itemInstanceId,
+            characterId: s.idPerso,
+            membershipType: compte.membershipType
+          });
+          s.actuel = Number(s.select.value);
+          ecrire("  OK : " + JSON.stringify(reponse).slice(0, 200));
+        } catch (erreur) {
+          ecrire("  Échec : " + erreur.message);
+        }
+        await pause(500);
+      }
+
+      ecrire("Terminé. Vérifie dans le jeu.");
+      boutonAppliquer.disabled = false;
+    }
+
+    document.getElementById("afficher").addEventListener("click", afficherPieces);
+    boutonAppliquer.addEventListener("click", appliquer);
+
+    // ---------- Chargement du compte ----------
+    async function charger() {
+      if (!jeton) {
+        statut.textContent = "Tu n'es pas connecté : repasse par la page de connexion.";
+        return;
+      }
+
+      try {
+        let memberships;
+        try {
+          memberships = await appelerBungie("/User/GetMembershipsForCurrentUser/");
+        } catch (erreur) {
+          const membershipId = sessionStorage.getItem("membershipId");
+          memberships = await appelerBungie("/User/GetMembershipsById/" + membershipId + "/-1/");
+        }
+        compte =
+          memberships.destinyMemberships.find(function (m) {
+            return m.membershipId === memberships.primaryMembershipId;
+          }) || memberships.destinyMemberships[0];
+
+        profil = await appelerBungie(
+          "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId +
+          "/?components=200,205,300,305"
+        );
+
+        for (const id in profil.characters.data) {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent =
+            CLASSES[profil.characters.data[id].classType] + " - Puissance " + profil.characters.data[id].light;
+          choixPersonnage.appendChild(option);
+        }
+
+        statut.textContent = "Connecté : " + compte.bungieGlobalDisplayName +
+          ". Choisis un personnage puis clique sur « Afficher ses pièces ».";
+      } catch (erreur) {
+        statut.textContent = "Erreur : " + erreur.message;
+      }
+    }
+
+    charger();
+  </script>
+</body>
+</html>
