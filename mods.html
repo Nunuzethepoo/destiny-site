@@ -26,6 +26,14 @@
   <div id="pieces"></div>
   <p><button id="appliquer" style="display:none">Appliquer les changements</button></p>
 
+  <h2>Sauvegarder ces mods dans un set</h2>
+  <p>
+    <select id="choixSet"></select>
+    <input id="nomNouveauSet" placeholder="Nom du nouveau set">
+    <button id="sauvegarderMods">Sauvegarder</button>
+  </p>
+  <p id="messageSauvegarde"></p>
+
   <h2>Journal</h2>
   <pre id="journal">(vide)</pre>
 
@@ -40,6 +48,9 @@
     const zonePieces = document.getElementById("pieces");
     const boutonAppliquer = document.getElementById("appliquer");
     const zoneJournal = document.getElementById("journal");
+    const choixSet = document.getElementById("choixSet");
+    const nomNouveauSet = document.getElementById("nomNouveauSet");
+    const messageSauvegarde = document.getElementById("messageSauvegarde");
 
     const CLASSES = { 0: "Titan", 1: "Chasseur", 2: "Arcaniste" };
     const EMPLACEMENTS_ARMURE = {
@@ -53,7 +64,8 @@
 
     let compte = null;
     let profil = null;
-    let selections = []; // une entrée par prise de mod affichée
+    let selections = [];      // une entrée par prise de mod affichée
+    let piecesAffichees = []; // une entrée par pièce affichée
 
     // ---------- Le journal ----------
     function viderJournal() {
@@ -102,7 +114,6 @@
 
     // ---------- Les définitions (demandées une par une, puis gardées en mémoire) ----------
 
-    // Un mod : nom, icône, catégorie, coût d'énergie
     async function definitionPlug(hash) {
       const cle = "defPlug_" + hash;
       const enMemoire = localStorage.getItem(cle);
@@ -121,17 +132,16 @@
       return infos;
     }
 
-    // Une pièce d'armure : nom, icône, et la définition de ses prises
     async function definitionObjet(hash) {
       const def = await appelerBungie("/Destiny2/Manifest/DestinyInventoryItemDefinition/" + hash + "/");
       return {
         nom: def.displayProperties.name,
         icone: def.displayProperties.icon,
+        exotique: def.inventory ? def.inventory.tierType === 6 : false,
         entrees: def.sockets ? def.sockets.socketEntries : []
       };
     }
 
-    // Les mods possédés pour une prise : profil + personnage, sans doublons
     function plugsPossedes(hashSet, idPerso) {
       const sources = [];
 
@@ -165,6 +175,8 @@
       const instance = profil.itemComponents.instances && profil.itemComponents.instances.data[objet.itemInstanceId];
       const capacite = instance && instance.energy ? instance.energy.energyCapacity : null;
 
+      piecesAffichees.push({ objet: objet, infos: infos, emplacement: emplacement });
+
       const bloc = document.createElement("div");
       bloc.className = "piece";
 
@@ -196,17 +208,15 @@
         const entree = infos.entrees[index];
         const prise = prises[index];
 
-        // Seules les prises avec un « plug set » et un mod actuel nous intéressent
         if (!entree || !entree.reusablePlugSetHash || !prise.plugHash) {
           continue;
         }
 
         const actuel = await definitionPlug(prise.plugHash);
         if (actuel.categorie.indexOf("enhancements") === -1) {
-          continue; // ce n'est pas une prise de mods
+          continue;
         }
 
-        // La liste des mods possédés, plus le mod actuel au cas où
         const hashs = plugsPossedes(entree.reusablePlugSetHash, idPerso);
         if (hashs.indexOf(prise.plugHash) === -1) {
           hashs.push(prise.plugHash);
@@ -269,6 +279,7 @@
     async function afficherPieces() {
       zonePieces.innerHTML = "";
       selections = [];
+      piecesAffichees = [];
       boutonAppliquer.style.display = "none";
 
       const idPerso = choixPersonnage.value;
@@ -288,6 +299,7 @@
         }
         statut.textContent = "Choisis tes mods, puis clique sur « Appliquer les changements ».";
         boutonAppliquer.style.display = "inline";
+        remplirSets();
       } catch (erreur) {
         statut.textContent = "Erreur : " + erreur.message;
       }
@@ -312,8 +324,6 @@
         return;
       }
 
-      // On commence par les mods les moins chers (et les emplacements vidés)
-      // pour libérer de l'énergie avant d'en demander davantage
       changements.sort(function (a, b) {
         return coutChoisi(a) - coutChoisi(b);
       });
@@ -349,8 +359,104 @@
       boutonAppliquer.disabled = false;
     }
 
+    // ---------- La sauvegarde des mods dans un set ----------
+
+    function remplirSets() {
+      const sets = JSON.parse(localStorage.getItem("setsArmures")) || [];
+      choixSet.innerHTML = "";
+
+      const nouveau = document.createElement("option");
+      nouveau.value = "nouveau";
+      nouveau.textContent = "Nouveau set (armure équipée + mods choisis)";
+      choixSet.appendChild(nouveau);
+
+      sets.forEach(function (set, index) {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = "Ajouter les mods au set « " + set.nom + " »";
+        choixSet.appendChild(option);
+      });
+    }
+
+    function sauvegarderMods() {
+      messageSauvegarde.textContent = "";
+
+      if (piecesAffichees.length === 0) {
+        messageSauvegarde.textContent = "Affiche d'abord les pièces d'un personnage.";
+        return;
+      }
+
+      // Les mods choisis, rangés par pièce
+      const mods = {};
+      for (const s of selections) {
+        const id = s.objet.itemInstanceId;
+        const choisi = s.options.find(function (o) {
+          return String(o.hash) === s.select.value;
+        });
+        if (!mods[id]) {
+          mods[id] = [];
+        }
+        mods[id].push({
+          index: s.index,
+          plugItemHash: choisi.hash,
+          nom: choisi.infos.nom,
+          energie: choisi.infos.energie
+        });
+      }
+
+      const sets = JSON.parse(localStorage.getItem("setsArmures")) || [];
+
+      if (choixSet.value === "nouveau") {
+        const nom = nomNouveauSet.value.trim();
+        if (nom === "") {
+          messageSauvegarde.textContent = "Donne un nom au nouveau set.";
+          return;
+        }
+
+        const classe = profil.characters.data[choixPersonnage.value].classType;
+        const pieces = piecesAffichees.map(function (p) {
+          return {
+            nom: p.infos.nom,
+            icone: p.infos.icone,
+            emplacement: p.emplacement,
+            classe: classe,
+            exotique: p.infos.exotique,
+            idInstance: p.objet.itemInstanceId,
+            hash: p.objet.itemHash,
+            stats: {},
+            total: 0,
+            lieu: "Équipée"
+          };
+        });
+        sets.push({ nom: nom, pieces: pieces, mods: mods });
+        messageSauvegarde.textContent = "Nouveau set « " + nom + " » sauvegardé avec ses mods.";
+      } else {
+        const set = sets[Number(choixSet.value)];
+        const retenus = {};
+        let nombre = 0;
+        for (const piece of set.pieces) {
+          if (mods[piece.idInstance]) {
+            retenus[piece.idInstance] = mods[piece.idInstance];
+            nombre++;
+          }
+        }
+        if (nombre === 0) {
+          messageSauvegarde.textContent =
+            "Aucune des pièces affichées ne fait partie de ce set. Équipe d'abord le set avec « Équiper un set ».";
+          return;
+        }
+        set.mods = retenus;
+        messageSauvegarde.textContent =
+          "Mods enregistrés pour " + nombre + " pièce(s) du set « " + set.nom + " ».";
+      }
+
+      localStorage.setItem("setsArmures", JSON.stringify(sets));
+      remplirSets();
+    }
+
     document.getElementById("afficher").addEventListener("click", afficherPieces);
     boutonAppliquer.addEventListener("click", appliquer);
+    document.getElementById("sauvegarderMods").addEventListener("click", sauvegarderMods);
 
     // ---------- Chargement du compte ----------
     async function charger() {
@@ -385,6 +491,7 @@
           choixPersonnage.appendChild(option);
         }
 
+        remplirSets();
         statut.textContent = "Connecté : " + compte.bungieGlobalDisplayName +
           ". Choisis un personnage puis clique sur « Afficher ses pièces ».";
       } catch (erreur) {
