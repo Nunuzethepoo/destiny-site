@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Mon profil Destiny 2</title>
+</head>
+<body>
+  <h1>Mon profil Destiny 2</h1>
+  <p id="statut">Chargement...</p>
+  <div id="personnages"></div>
+  <p><a href="oauth.html">Retour à la connexion</a></p>
+
+  <script>
+    const CLE_API = "COLLE_TA_CLE_API_ICI";
+    const jeton = sessionStorage.getItem("jeton");
+    const statut = document.getElementById("statut");
+    const zonePersonnages = document.getElementById("personnages");
+    const CLASSES = { 0: "Titan", 1: "Chasseur", 2: "Arcaniste" };
+
+    // Une fonction réutilisable pour parler à Bungie
+    async function appelerBungie(chemin) {
+      const reponse = await fetch("https://www.bungie.net/Platform" + chemin, {
+        headers: {
+          "X-API-Key": CLE_API,
+          "Authorization": "Bearer " + jeton
+        }
+      });
+      const donnees = await reponse.json();
+      if (donnees.ErrorStatus !== "Success") {
+        throw new Error(donnees.ErrorStatus + " - " + donnees.Message);
+      }
+      return donnees.Response;
+    }
+
+    async function charger() {
+      if (!jeton) {
+        statut.textContent = "Tu n'es pas connecté : repasse par la page de connexion.";
+        return;
+      }
+
+      try {
+        // 1. Quels comptes Destiny sont liés à mon compte Bungie ?
+        const memberships = await appelerBungie("/User/GetMembershipsForCurrentUser/");
+        const compte =
+          memberships.destinyMemberships.find(function (m) {
+            return m.membershipId === memberships.primaryMembershipId;
+          }) || memberships.destinyMemberships[0];
+
+        // 2. Quels sont mes personnages ? (components=200)
+        const profil = await appelerBungie(
+          "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId + "/?components=200"
+        );
+
+        statut.textContent = "Connecté : " + compte.bungieGlobalDisplayName;
+
+        const personnages = profil.characters.data;
+        for (const id in personnages) {
+          const perso = personnages[id];
+          const ligne = document.createElement("p");
+          ligne.textContent = CLASSES[perso.classType] + " - Puissance " + perso.light;
+          zonePersonnages.appendChild(ligne);
+        }
+      } catch (erreur) {
+        statut.textContent = "Erreur : " + erreur.message;
+      }
+    }
+
+    charger();
+  </script>
+</body>
+</html>
