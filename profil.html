@@ -17,6 +17,15 @@
     const zonePersonnages = document.getElementById("personnages");
     const CLASSES = { 0: "Titan", 1: "Chasseur", 2: "Arcaniste" };
 
+    // Numéros des emplacements d'armure
+    const EMPLACEMENTS_ARMURE = {
+      3448274439: "Casque",
+      3551918588: "Gants",
+      14239492: "Torse",
+      20886954: "Jambes",
+      1585787867: "Objet de classe"
+    };
+
     // Une fonction réutilisable pour parler à Bungie
     async function appelerBungie(chemin) {
       const reponse = await fetch("https://www.bungie.net/Platform" + chemin, {
@@ -32,6 +41,31 @@
       return donnees.Response;
     }
 
+    // Affiche les armures équipées d'un personnage
+    async function afficherArmures(equipement, conteneur) {
+      for (const objet of equipement) {
+        const emplacement = EMPLACEMENTS_ARMURE[objet.bucketHash];
+        if (!emplacement) {
+          continue; // ce n'est pas une pièce d'armure
+        }
+
+        const definition = await appelerBungie(
+          "/Destiny2/Manifest/DestinyInventoryItemDefinition/" + objet.itemHash + "/"
+        );
+
+        const ligne = document.createElement("div");
+        const image = document.createElement("img");
+        image.src = "https://www.bungie.net" + definition.displayProperties.icon;
+        image.width = 48;
+        const texte = document.createElement("span");
+        texte.textContent = " " + emplacement + " : " + definition.displayProperties.name;
+
+        ligne.appendChild(image);
+        ligne.appendChild(texte);
+        conteneur.appendChild(ligne);
+      }
+    }
+
     async function charger() {
       if (!jeton) {
         statut.textContent = "Tu n'es pas connecté : repasse par la page de connexion.";
@@ -40,26 +74,40 @@
 
       try {
         // 1. Quels comptes Destiny sont liés à mon compte Bungie ?
-       const membershipId = sessionStorage.getItem("membershipId");
-       const memberships = await appelerBungie("/User/GetMembershipsById/" + membershipId + "/-1/");
+        let memberships;
+        try {
+          memberships = await appelerBungie("/User/GetMembershipsForCurrentUser/");
+        } catch (erreur) {
+          // Solution de secours : on utilise l'identifiant reçu à la connexion
+          const membershipId = sessionStorage.getItem("membershipId");
+          memberships = await appelerBungie("/User/GetMembershipsById/" + membershipId + "/-1/");
+        }
+
         const compte =
           memberships.destinyMemberships.find(function (m) {
             return m.membershipId === memberships.primaryMembershipId;
           }) || memberships.destinyMemberships[0];
 
-        // 2. Quels sont mes personnages ? (components=200)
+        // 2. Mes personnages (200) et leur équipement (205)
         const profil = await appelerBungie(
-          "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId + "/?components=200"
+          "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId + "/?components=200,205"
         );
 
         statut.textContent = "Connecté : " + compte.bungieGlobalDisplayName;
 
         const personnages = profil.characters.data;
+        const equipements = profil.characterEquipment.data;
+
         for (const id in personnages) {
           const perso = personnages[id];
-          const ligne = document.createElement("p");
-          ligne.textContent = CLASSES[perso.classType] + " - Puissance " + perso.light;
-          zonePersonnages.appendChild(ligne);
+
+          const bloc = document.createElement("div");
+          const titre = document.createElement("h2");
+          titre.textContent = CLASSES[perso.classType] + " - Puissance " + perso.light;
+          bloc.appendChild(titre);
+          zonePersonnages.appendChild(bloc);
+
+          await afficherArmures(equipements[id].items, bloc);
         }
       } catch (erreur) {
         statut.textContent = "Erreur : " + erreur.message;
