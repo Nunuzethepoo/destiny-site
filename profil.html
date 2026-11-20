@@ -40,7 +40,8 @@
 
       try {
         // 1. Quels comptes Destiny sont liés à mon compte Bungie ?
-        const memberships = await appelerBungie("/User/GetMembershipsForCurrentUser/");
+       const membershipId = sessionStorage.getItem("membershipId");
+       const memberships = await appelerBungie("/User/GetMembershipsById/" + membershipId + "/-1/");
         const compte =
           memberships.destinyMemberships.find(function (m) {
             return m.membershipId === memberships.primaryMembershipId;
