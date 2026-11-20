@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Mes armures</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .armure { display: flex; align-items: center; margin: 4px 0; }
+    .armure img { width: 48px; height: 48px; margin-right: 10px; }
+    label { margin-right: 16px; }
+  </style>
+</head>
+<body>
+  <h1>Mes armures</h1>
+  <p id="statut">Chargement...</p>
+
+  <div id="filtres" style="display:none">
+    <label>Classe :
+      <select id="filtreClasse">
+        <option value="">Toutes</option>
+        <option value="0">Titan</option>
+        <option value="1">Chasseur</option>
+        <option value="2">Arcaniste</option>
+      </select>
+    </label>
+    <label>Emplacement :
+      <select id="filtreEmplacement">
+        <option value="">Tous</option>
+      </select>
+    </label>
+  </div>
+
+  <div id="liste"></div>
+  <p><a href="profil.html">Retour au profil</a></p>
+
+  <script>
+    const CLE_API = "8f0fe7144bbc4fdda21ed3a26889aecb";
+    const LANGUE = "fr";
+    const jeton = sessionStorage.getItem("jeton");
+
+    const statut = document.getElementById("statut");
+    const zoneFiltres = document.getElementById("filtres");
+    const filtreClasse = document.getElementById("filtreClasse");
+    const filtreEmplacement = document.getElementById("filtreEmplacement");
+    const zoneListe = document.getElementById("liste");
+
+    const CLASSES = { 0: "Titan", 1: "Chasseur", 2: "Arcaniste", 3: "Autre" };
+    const EMPLACEMENTS_ARMURE = {
+      3448274439: "Casque",
+      3551918588: "Gants",
+      14239492: "Torse",
+      20886954: "Jambes",
+      1585787867: "Objet de classe"
+    };
+
+    let toutesLesArmures = [];
+
+    // On remplit la liste déroulante des emplacements
+    for (const hash in EMPLACEMENTS_ARMURE) {
+      const option = document.createElement("option");
+      option.value = EMPLACEMENTS_ARMURE[hash];
+      option.textContent = EMPLACEMENTS_ARMURE[hash];
+      filtreEmplacement.appendChild(option);
+    }
+
+    async function appelerBungie(chemin) {
+      const reponse = await fetch("https://www.bungie.net/Platform" + chemin, {
+        headers: {
+          "X-API-Key": CLE_API,
+          "Authorization": "Bearer " + jeton
+        }
+      });
+      const donnees = await reponse.json();
+      if (donnees.ErrorStatus !== "Success") {
+        throw new Error(donnees.ErrorStatus + " - " + donnees.Message);
+      }
+      return donnees.Response;
+    }
+
+    // Télécharge toutes les définitions d'objets (nom, icône, type...)
+    async function chargerDefinitions() {
+      const manifest = await appelerBungie("/Destiny2/Manifest/");
+      const chemins = manifest.jsonWorldComponentContentPaths[LANGUE];
+      const chemin =
+        chemins.DestinyInventoryItemLiteDefinition ||
+        chemins.DestinyInventoryItemDefinition;
+      const reponse = await fetch("https://www.bungie.net" + chemin);
+      return await reponse.json();
+    }
+
+    // Affiche les armures selon les filtres choisis
+    function afficher() {
+      const classe = filtreClasse.value;
+      const emplacement = filtreEmplacement.value;
+
+      const visibles = toutesLesArmures.filter(function (a) {
+        const classeOk = classe === "" || String(a.classe) === classe;
+        const emplacementOk = emplacement === "" || a.emplacement === emplacement;
+        return classeOk && emplacementOk;
+      });
+
+      statut.textContent = visibles.length + " armure(s) affichée(s) sur " + toutesLesArmures.length;
+      zoneListe.innerHTML = "";
+
+      for (const armure of visibles) {
+        const ligne = document.createElement("div");
+        ligne.className = "armure";
+
+        const image = document.createElement("img");
+        image.src = "https://www.bungie.net" + armure.icone;
+
+        const texte = document.createElement("span");
+        texte.textContent =
+          armure.nom + " (" + armure.emplacement + ", " + CLASSES[armure.classe] + ") - " + armure.lieu;
+
+        ligne.appendChild(image);
+        ligne.appendChild(texte);
+        zoneListe.appendChild(ligne);
+      }
+    }
+
+    filtreClasse.addEventListener("change", afficher);
+    filtreEmplacement.addEventListener("change", afficher);
+
+    async function charger() {
+      if (!jeton) {
+        statut.textContent = "Tu n'es pas connecté : repasse par la page de connexion.";
+        return;
+      }
+
+      try {
+        // 1. Mon compte Destiny
+        statut.textContent = "Recherche de ton compte...";
+        let memberships;
+        try {
+          memberships = await appelerBungie("/User/GetMembershipsForCurrentUser/");
+        } catch (erreur) {
+          const membershipId = sessionStorage.getItem("membershipId");
+          memberships = await appelerBungie("/User/GetMembershipsById/" + membershipId + "/-1/");
+        }
+        const compte =
+          memberships.destinyMemberships.find(function (m) {
+            return m.membershipId === memberships.primaryMembershipId;
+          }) || memberships.destinyMemberships[0];
+
+        // 2. Coffre (102), inventaires des personnages (201), équipement (205)
+        statut.textContent = "Chargement de ton inventaire...";
+        const profil = await appelerBungie(
+          "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId + "/?components=102,201,205"
+        );
+
+        // 3. Tous les objets, avec leur lieu
+        const objets = [];
+        function ajouter(liste, lieu) {
+          for (const objet of liste) {
+            objets.push({ objet: objet, lieu: lieu });
+          }
+        }
+
+        if (profil.profileInventory && profil.profileInventory.data) {
+          ajouter(profil.profileInventory.data.items, "Coffre");
+        }
+        if (profil.characterInventories && profil.characterInventories.data) {
+          for (const id in profil.characterInventories.data) {
+            ajouter(profil.characterInventories.data[id].items, "Inventaire d'un personnage");
+          }
+        }
+        if (profil.characterEquipment && profil.characterEquipment.data) {
+          for (const id in profil.characterEquipment.data) {
+            ajouter(profil.characterEquipment.data[id].items, "Équipée");
+          }
+        }
+
+        // 4. On traduit chaque objet grâce aux définitions, et on garde l'armure
+        statut.textContent = "Téléchargement des définitions...";
+        const definitions = await chargerDefinitions();
+
+        for (const element of objets) {
+          const definition = definitions[element.objet.itemHash];
+          if (!definition || definition.itemType !== 2 || !definition.inventory) {
+            continue; // pas de définition, ou ce n'est pas de l'armure
+          }
+          const emplacement = EMPLACEMENTS_ARMURE[definition.inventory.bucketTypeHash];
+          if (!emplacement) {
+            continue;
+          }
+          toutesLesArmures.push({
+            nom: definition.displayProperties.name,
+            icone: definition.displayProperties.icon,
+            emplacement: emplacement,
+            classe: definition.classType,
+            lieu: element.lieu,
+            idInstance: element.objet.itemInstanceId
+          });
+        }
+
+        toutesLesArmures.sort(function (a, b) {
+          return a.emplacement.localeCompare(b.emplacement) || a.nom.localeCompare(b.nom);
+        });
+
+        zoneFiltres.style.display = "block";
+        afficher();
+      } catch (erreur) {
+        statut.textContent = "Erreur : " + erreur.message;
+      }
+    }
+
+    charger();
+  </script>
+</body>
+</html>
