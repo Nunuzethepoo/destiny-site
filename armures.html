@@ -10,9 +10,11 @@
     .armure:hover { background: #eee; }
     .piece { cursor: pointer; }
     .armure img, .piece img { width: 48px; height: 48px; margin-right: 10px; }
+    .stats { color: #555; font-size: 0.9em; }
     .vide { color: #888; padding-left: 58px; }
     label { margin-right: 16px; }
     #message { color: #b00020; }
+    #totalSet { font-weight: bold; }
   </style>
 </head>
 <body>
@@ -20,6 +22,7 @@
 
   <h2>Mon set en cours</h2>
   <div id="set"></div>
+  <p id="totalSet"></p>
   <input id="nomSet" placeholder="Nom du set">
   <button id="sauvegarder">Sauvegarder le set</button>
   <p id="message"></p>
@@ -61,6 +64,7 @@
     const filtreEmplacement = document.getElementById("filtreEmplacement");
     const zoneListe = document.getElementById("liste");
     const zoneSet = document.getElementById("set");
+    const zoneTotal = document.getElementById("totalSet");
     const zoneSauvegardes = document.getElementById("sauvegardes");
 
     const CLASSES = { 0: "Titan", 1: "Chasseur", 2: "Arcaniste", 3: "Autre" };
@@ -73,11 +77,14 @@
     };
     const ORDRE = ["Casque", "Gants", "Torse", "Jambes", "Objet de classe"];
 
+    // Les 6 stats d'armure (numéros tirés de ma mémoire : à vérifier avec le résultat)
+    const STATS_ARMURE = [2996146975, 392767087, 1943323491, 1735777505, 144602215, 4244567218];
+
+    let definitionsStats = {};
     let toutesLesArmures = [];
-    let monSet = {}; // une pièce par emplacement : { "Casque": armure, ... }
+    let monSet = {};
     let setsSauvegardes = JSON.parse(localStorage.getItem("setsArmures")) || [];
 
-    // Liste déroulante des emplacements
     for (const hash in EMPLACEMENTS_ARMURE) {
       const option = document.createElement("option");
       option.value = EMPLACEMENTS_ARMURE[hash];
@@ -99,14 +106,77 @@
       return donnees.Response;
     }
 
+    // Télécharge les définitions d'objets ET les noms des stats
     async function chargerDefinitions() {
       const manifest = await appelerBungie("/Destiny2/Manifest/");
       const chemins = manifest.jsonWorldComponentContentPaths[LANGUE];
-      const chemin =
+
+      const cheminObjets =
         chemins.DestinyInventoryItemLiteDefinition ||
         chemins.DestinyInventoryItemDefinition;
-      const reponse = await fetch("https://www.bungie.net" + chemin);
-      return await reponse.json();
+      const reponseObjets = await fetch("https://www.bungie.net" + cheminObjets);
+      const objets = await reponseObjets.json();
+
+      const reponseStats = await fetch("https://www.bungie.net" + chemins.DestinyStatDefinition);
+      const stats = await reponseStats.json();
+
+      return { objets: objets, stats: stats };
+    }
+
+    // ---------- Les stats ----------
+
+    function nomStat(hash) {
+      const definition = definitionsStats[hash];
+      return definition ? definition.displayProperties.name : "Stat " + hash;
+    }
+
+    // Transforme { numéro: valeur } en texte lisible, sans les stats à zéro
+    function texteStats(stats) {
+      stats = stats || {};
+      const morceaux = [];
+      for (const hash of STATS_ARMURE) {
+        if (stats[hash]) {
+          morceaux.push(nomStat(hash) + " " + stats[hash]);
+        }
+      }
+      return morceaux.join(" · ");
+    }
+
+    // Lit les stats d'une pièce dans la réponse de Bungie
+    function lireStats(statsObjets, idInstance) {
+      const resultat = {};
+      const donnees = statsObjets[idInstance];
+      if (!donnees || !donnees.stats) {
+        return resultat;
+      }
+      for (const hash of STATS_ARMURE) {
+        if (donnees.stats[hash]) {
+          resultat[hash] = donnees.stats[hash].value;
+        }
+      }
+      return resultat;
+    }
+
+    function totalDesStats(stats) {
+      let somme = 0;
+      for (const hash of STATS_ARMURE) {
+        somme += (stats && stats[hash]) || 0;
+      }
+      return somme;
+    }
+
+    // Une ligne de texte avec le nom et les stats, utilisée dans les deux listes
+    function creerBlocTexte(titre, stats) {
+      const bloc = document.createElement("div");
+      const ligneTitre = document.createElement("div");
+      ligneTitre.textContent = titre;
+      const ligneStats = document.createElement("div");
+      ligneStats.className = "stats";
+      const texte = texteStats(stats);
+      ligneStats.textContent = texte === "" ? "Stats non disponibles" : texte + " (total " + totalDesStats(stats) + ")";
+      bloc.appendChild(ligneTitre);
+      bloc.appendChild(ligneStats);
+      return bloc;
     }
 
     // ---------- Le set en cours ----------
@@ -157,17 +227,31 @@
 
         const image = document.createElement("img");
         image.src = "https://www.bungie.net" + armure.icone;
-        const texte = document.createElement("span");
-        texte.textContent = emplacement + " : " + armure.nom + (armure.exotique ? " (exotique)" : "");
 
+        const titre = emplacement + " : " + armure.nom + (armure.exotique ? " (exotique)" : "");
         ligne.appendChild(image);
-        ligne.appendChild(texte);
+        ligne.appendChild(creerBlocTexte(titre, armure.stats));
         ligne.addEventListener("click", function () {
           delete monSet[emplacement];
           afficherSet();
         });
         zoneSet.appendChild(ligne);
       }
+
+      // Total du set, stat par stat
+      const pieces = Object.values(monSet);
+      if (pieces.length === 0) {
+        zoneTotal.textContent = "";
+        return;
+      }
+      const totaux = {};
+      for (const piece of pieces) {
+        for (const hash of STATS_ARMURE) {
+          totaux[hash] = (totaux[hash] || 0) + ((piece.stats && piece.stats[hash]) || 0);
+        }
+      }
+      zoneTotal.textContent =
+        "Total du set : " + texteStats(totaux) + " (somme " + totalDesStats(totaux) + ")";
     }
 
     // ---------- Les sets sauvegardés ----------
@@ -188,7 +272,11 @@
         boutonCharger.addEventListener("click", function () {
           monSet = {};
           for (const piece of set.pieces) {
-            monSet[piece.emplacement] = piece;
+            // On prend la version à jour de la pièce si on la retrouve
+            const actuelle = toutesLesArmures.find(function (a) {
+              return a.idInstance === piece.idInstance;
+            });
+            monSet[piece.emplacement] = actuelle || piece;
           }
           message.textContent = "";
           afficherSet();
@@ -235,7 +323,13 @@
         return classeOk && emplacementOk;
       });
 
-      statut.textContent = visibles.length + " armure(s) affichée(s) sur " + toutesLesArmures.length;
+      const avecStats = toutesLesArmures.filter(function (a) {
+        return a.total > 0;
+      }).length;
+
+      statut.textContent =
+        visibles.length + " armure(s) affichée(s) sur " + toutesLesArmures.length +
+        " (stats trouvées pour " + avecStats + ")";
       zoneListe.innerHTML = "";
 
       for (const armure of visibles) {
@@ -245,13 +339,12 @@
         const image = document.createElement("img");
         image.src = "https://www.bungie.net" + armure.icone;
 
-        const texte = document.createElement("span");
-        texte.textContent =
+        const titre =
           armure.nom + (armure.exotique ? " (exotique)" : "") +
           " - " + armure.emplacement + ", " + CLASSES[armure.classe] + " - " + armure.lieu;
 
         ligne.appendChild(image);
-        ligne.appendChild(texte);
+        ligne.appendChild(creerBlocTexte(titre, armure.stats));
         ligne.addEventListener("click", function () {
           ajouterAuSet(armure);
         });
@@ -282,10 +375,15 @@
             return m.membershipId === memberships.primaryMembershipId;
           }) || memberships.destinyMemberships[0];
 
+        // 102 coffre, 201 inventaires, 205 équipement, 304 stats des objets
         statut.textContent = "Chargement de ton inventaire...";
         const profil = await appelerBungie(
-          "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId + "/?components=102,201,205"
+          "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId +
+          "/?components=102,201,205,304"
         );
+
+        const statsObjets =
+          (profil.itemComponents && profil.itemComponents.stats && profil.itemComponents.stats.data) || {};
 
         const objets = [];
         function ajouter(liste, lieu) {
@@ -310,9 +408,10 @@
 
         statut.textContent = "Téléchargement des définitions...";
         const definitions = await chargerDefinitions();
+        definitionsStats = definitions.stats;
 
         for (const element of objets) {
-          const definition = definitions[element.objet.itemHash];
+          const definition = definitions.objets[element.objet.itemHash];
           if (!definition || definition.itemType !== 2 || !definition.inventory) {
             continue;
           }
@@ -320,6 +419,9 @@
           if (!emplacement) {
             continue;
           }
+
+          const stats = lireStats(statsObjets, element.objet.itemInstanceId);
+
           toutesLesArmures.push({
             nom: definition.displayProperties.name,
             icone: definition.displayProperties.icon,
@@ -328,7 +430,9 @@
             exotique: definition.inventory.tierType === 6,
             lieu: element.lieu,
             idInstance: element.objet.itemInstanceId,
-            hash: element.objet.itemHash
+            hash: element.objet.itemHash,
+            stats: stats,
+            total: totalDesStats(stats)
           });
         }
 
@@ -338,6 +442,7 @@
 
         zoneFiltres.style.display = "block";
         afficher();
+        afficherSet();
       } catch (erreur) {
         statut.textContent = "Erreur : " + erreur.message;
       }
