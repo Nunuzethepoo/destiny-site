@@ -8,9 +8,11 @@
   <h1>Connexion à Bungie</h1>
   <button id="connexion">Se connecter avec Bungie</button>
   <p id="statut"></p>
+  <p><a href="profil.html">Voir mon profil</a></p>
 
   <script>
     const CLIENT_ID = "56947";
+    const CLE_API = "8f0fe7144bbc4fdda21ed3a26889aecb";
 
     // Clic sur le bouton : on part vers la page de Bungie
     document.getElementById("connexion").addEventListener("click", function () {
@@ -24,15 +26,47 @@
         "&state=" + etat;
     });
 
-    // Au retour de Bungie : on regarde si l'adresse contient un code
+    // Au retour de Bungie : on lit le code dans l'adresse
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     const etat = params.get("state");
     const statut = document.getElementById("statut");
 
+    // On nettoie l'adresse : le code ne peut servir qu'une seule fois
+    window.history.replaceState({}, "", window.location.pathname);
+
+    async function echangerCode(code) {
+      try {
+        const reponse = await fetch("https://www.bungie.net/platform/app/oauth/token/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-API-Key": CLE_API
+          },
+          body: new URLSearchParams({
+            grant_type: "authorization_code",
+            code: code,
+            client_id: CLIENT_ID
+          })
+        });
+        const donnees = await reponse.json();
+
+        if (donnees.access_token) {
+          sessionStorage.setItem("jeton", donnees.access_token);
+          sessionStorage.setItem("membershipId", donnees.membership_id);
+          statut.textContent = "Connecté ! Identifiant Bungie : " + donnees.membership_id;
+        } else {
+          statut.textContent = "Réponse de Bungie : " + JSON.stringify(donnees);
+        }
+      } catch (erreur) {
+        statut.textContent = "Erreur : " + erreur;
+      }
+    }
+
     if (code) {
       if (etat === sessionStorage.getItem("etatOAuth")) {
-        statut.textContent = "Code reçu ! Prochaine étape : l'échanger contre un jeton.";
+        statut.textContent = "Code reçu, échange en cours...";
+        echangerCode(code);
       } else {
         statut.textContent = "Erreur : la vérification de sécurité a échoué.";
       }
