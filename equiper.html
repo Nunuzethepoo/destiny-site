@@ -23,7 +23,7 @@
   <h2>Journal</h2>
   <pre id="journal">(vide)</pre>
 
-  <p><a href="armures.html">Créer des sets</a> | <a href="profil.html">Profil</a></p>
+  <p><a href="armures.html">Créer des sets</a> | <a href="mods.html">Mods</a> | <a href="profil.html">Profil</a></p>
 
   <script>
     const CLE_API = "8f0fe7144bbc4fdda21ed3a26889aecb";
@@ -50,8 +50,6 @@
       }
       zoneJournal.textContent += texte + "\n";
     }
-
-    // Une petite pause (en millisecondes) entre deux demandes
     function pause(ms) {
       return new Promise(function (resolve) {
         setTimeout(resolve, ms);
@@ -70,7 +68,6 @@
       return donnees.Response;
     }
 
-    // Même chose, mais pour ENVOYER un ordre (méthode POST)
     async function envoyerBungie(chemin, corps) {
       const reponse = await fetch("https://www.bungie.net/Platform" + chemin, {
         method: "POST",
@@ -114,7 +111,6 @@
       return lieux;
     }
 
-    // Déplace une pièce vers le coffre (versCoffre = true) ou depuis le coffre
     async function transferer(piece, idPerso, versCoffre) {
       await envoyerBungie("/Destiny2/Actions/Items/TransferItem/", {
         itemReferenceHash: piece.hash,
@@ -125,6 +121,81 @@
         membershipType: compte.membershipType
       });
       await pause(400);
+    }
+
+    // ---------- Les mods du set ----------
+    async function appliquerMods(set, idPersonnage) {
+      if (!set.mods) {
+        return;
+      }
+
+      ecrire("\nApplication des mods...");
+      await pause(1500); // on laisse à Bungie le temps de mettre son inventaire à jour
+
+      const profil = await appelerBungie(
+        "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId +
+        "/?components=205,305"
+      );
+
+      const equipees = profil.characterEquipment.data[idPersonnage].items.map(function (objet) {
+        return objet.itemInstanceId;
+      });
+
+      // Quels mods faut-il changer ?
+      const changements = [];
+      for (const piece of set.pieces) {
+        const modsPiece = set.mods[piece.idInstance];
+        if (!modsPiece) {
+          continue;
+        }
+        if (equipees.indexOf(piece.idInstance) === -1) {
+          ecrire(piece.nom + " : pas équipée sur ce personnage, mods ignorés.");
+          continue;
+        }
+        const donnees = profil.itemComponents.sockets.data[piece.idInstance];
+        if (!donnees) {
+          ecrire(piece.nom + " : prises introuvables, mods ignorés.");
+          continue;
+        }
+
+        for (const mod of modsPiece) {
+          const prise = donnees.sockets[mod.index];
+          if (prise && prise.plugHash === mod.plugItemHash) {
+            continue; // déjà en place
+          }
+          changements.push({ piece: piece, mod: mod });
+        }
+      }
+
+      if (changements.length === 0) {
+        ecrire("Les mods sont déjà en place.");
+        return;
+      }
+
+      // Les moins chers d'abord, pour libérer de l'énergie
+      changements.sort(function (a, b) {
+        return (a.mod.energie || 0) - (b.mod.energie || 0);
+      });
+
+      for (const c of changements) {
+        ecrire(c.piece.nom + ", prise " + c.mod.index + " : « " + c.mod.nom + " »...");
+        try {
+          await envoyerBungie("/Destiny2/Actions/Items/InsertSocketPlugFree/", {
+            plug: {
+              socketIndex: c.mod.index,
+              socketArrayType: 0,
+              plugItemHash: c.mod.plugItemHash
+            },
+            itemId: c.piece.idInstance,
+            characterId: idPersonnage,
+            membershipType: compte.membershipType
+          });
+          ecrire("  OK");
+        } catch (erreur) {
+          ecrire("  Échec : " + erreur.message);
+        }
+        await pause(500);
+      }
     }
 
     // ---------- Équiper un set ----------
@@ -184,18 +255,20 @@
           }
         }
 
-        if (aEquiper.length === 0) {
-          ecrire("Rien à équiper.");
-          return;
+        if (aEquiper.length > 0) {
+          ecrire("Envoi de l'ordre d'équipement...");
+          const resultat = await envoyerBungie("/Destiny2/Actions/Items/EquipItems/", {
+            itemIds: aEquiper,
+            characterId: idPersonnage,
+            membershipType: compte.membershipType
+          });
+          ecrire("Réponse de Bungie : " + JSON.stringify(resultat));
+        } else {
+          ecrire("Aucune pièce à équiper.");
         }
 
-        ecrire("Envoi de l'ordre d'équipement...");
-        const resultat = await envoyerBungie("/Destiny2/Actions/Items/EquipItems/", {
-          itemIds: aEquiper,
-          characterId: idPersonnage,
-          membershipType: compte.membershipType
-        });
-        ecrire("Réponse de Bungie : " + JSON.stringify(resultat));
+        await appliquerMods(set, idPersonnage);
+        ecrire("\nTerminé. Vérifie dans le jeu.");
       } catch (erreur) {
         ecrire("Erreur : " + erreur.message);
       }
@@ -216,14 +289,15 @@
 
         const noms = set.pieces.map(function (p) { return p.nom; }).join(", ");
         const texte = document.createElement("span");
-        texte.textContent = set.nom + " (" + noms + ") ";
+        texte.textContent = set.nom + (set.mods ? " [+ mods]" : "") + " (" + noms + ") ";
 
         const bouton = document.createElement("button");
         bouton.textContent = "Équiper ce set";
         bouton.addEventListener("click", async function () {
           const idPersonnage = choixPersonnage.value;
           const perso = personnages[idPersonnage];
-          const question = "Équiper « " + set.nom + " » sur " + CLASSES[perso.classType] + " ?";
+          const question = "Équiper « " + set.nom + " » sur " + CLASSES[perso.classType] +
+            (set.mods ? " (avec ses mods)" : "") + " ?";
           if (confirm(question)) {
             bouton.disabled = true;
             await equiperSet(set, idPersonnage);
