@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Test API Bungie</title>
+</head>
+<body>
+  <h1>Test de l'API Bungie</h1>
+  <button id="test">Tester la connexion</button>
+  <p id="resultat"></p>
+
+  <script>
+    const CLE_API = "8f0fe7144bbc4fdda21ed3a26889aecb";
+
+    document.getElementById("test").addEventListener("click", async function () {
+      const resultat = document.getElementById("resultat");
+      resultat.textContent = "Chargement...";
+
+      try {
+        const reponse = await fetch("https://www.bungie.net/Platform/Destiny2/Manifest/", {
+          headers: { "X-API-Key": CLE_API }
+        });
+        const donnees = await reponse.json();
+
+        if (donnees.ErrorStatus === "Success") {
+          resultat.textContent = "Connecté ! Version du manifest : " + donnees.Response.version;
+        } else {
+          resultat.textContent = "Bungie répond : " + donnees.ErrorStatus;
+        }
+      } catch (erreur) {
+        resultat.textContent = "Erreur : " + erreur;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Mon gestionnaire Destiny 2</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #1a1a2e;
+      color: white;
+      padding: 20px;
+    }
+    .carte {
+      display: inline-block;
+      background: #16213e;
+      border: 2px solid #444;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 6px;
+      cursor: pointer;
+    }
+    .carte:hover {
+      border-color: gold;
+    }
+    input, button {
+      padding: 8px;
+      margin: 4px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Mon gestionnaire d'armures</h1>
+
+  <h2>Inventaire</h2>
+  <div id="inventaire"></div>
+
+  <h2>Mon set en cours</h2>
+  <div id="set"></div>
+  <input id="nomSet" placeholder="Nom du set">
+  <button id="sauvegarder">Sauvegarder le set</button>
+
+  <h2>Sets sauvegardés</h2>
+  <div id="sauvegardes"></div>
+
+  <script>
+    const armures = [
+      { nom: "Casque de l'Aube", type: "Casque", resilience: 20 },
+      { nom: "Gants du Vide", type: "Gants", resilience: 12 },
+      { nom: "Plastron Solaire", type: "Torse", resilience: 25 },
+      { nom: "Bottes d'Ombre", type: "Jambes", resilience: 8 }
+    ];
+
+    let monSet = [];
+
+    // On relit les sets sauvegardés (ou une liste vide s'il n'y en a pas)
+    let setsSauvegardes = JSON.parse(localStorage.getItem("setsD2")) || [];
+
+    const zoneInventaire = document.getElementById("inventaire");
+    const zoneSet = document.getElementById("set");
+    const zoneSauvegardes = document.getElementById("sauvegardes");
+
+    function creerCarte(texte, auClic) {
+      const carte = document.createElement("div");
+      carte.className = "carte";
+      carte.textContent = texte;
+      carte.addEventListener("click", auClic);
+      return carte;
+    }
+
+    function texteArmure(armure) {
+      return armure.nom + " (" + armure.type + ") - Résilience " + armure.resilience;
+    }
+
+    function enregistrer() {
+      localStorage.setItem("setsD2", JSON.stringify(setsSauvegardes));
+    }
+
+    function afficher() {
+      zoneInventaire.innerHTML = "";
+      zoneSet.innerHTML = "";
+      zoneSauvegardes.innerHTML = "";
+
+      for (const armure of armures) {
+        zoneInventaire.appendChild(creerCarte(texteArmure(armure), function () {
+          if (!monSet.includes(armure)) {
+            monSet.push(armure);
+            afficher();
+          }
+        }));
+      }
+
+      for (const armure of monSet) {
+        zoneSet.appendChild(creerCarte(texteArmure(armure), function () {
+          monSet.splice(monSet.indexOf(armure), 1);
+          afficher();
+        }));
+      }
+
+      // Les sets sauvegardés : clic = charger, bouton = supprimer
+      for (const set of setsSauvegardes) {
+        const texte = set.nom + " (" + set.noms.length + " pièces)";
+        const carte = creerCarte(texte, function () {
+          monSet = armures.filter(function (a) {
+            return set.noms.includes(a.nom);
+          });
+          afficher();
+        });
+
+        const boutonSupprimer = document.createElement("button");
+        boutonSupprimer.textContent = "Supprimer";
+        boutonSupprimer.addEventListener("click", function (evenement) {
+          evenement.stopPropagation();
+          setsSauvegardes.splice(setsSauvegardes.indexOf(set), 1);
+          enregistrer();
+          afficher();
+        });
+
+        carte.appendChild(boutonSupprimer);
+        zoneSauvegardes.appendChild(carte);
+      }
+    }
+
+    document.getElementById("sauvegarder").addEventListener("click", function () {
+      const nom = document.getElementById("nomSet").value.trim();
+      if (nom === "" || monSet.length === 0) {
+        return;
+      }
+      setsSauvegardes.push({
+        nom: nom,
+        noms: monSet.map(function (a) { return a.nom; })
+      });
+      enregistrer();
+      afficher();
+    });
+
+    afficher();
+  </script>
+</body>
+</html>
