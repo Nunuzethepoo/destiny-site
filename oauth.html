@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Connexion Bungie</title>
+</head>
+<body>
+  <h1>Connexion à Bungie</h1>
+  <button id="connexion">Se connecter avec Bungie</button>
+  <p id="statut"></p>
+
+  <script>
+    const CLIENT_ID = "TON_CLIENT_ID";
+
+    // Clic sur le bouton : on part vers la page de Bungie
+    document.getElementById("connexion").addEventListener("click", function () {
+      const etat = crypto.randomUUID();
+      sessionStorage.setItem("etatOAuth", etat);
+
+      window.location.href =
+        "https://www.bungie.net/en/OAuth/Authorize" +
+        "?client_id=" + CLIENT_ID +
+        "&response_type=code" +
+        "&state=" + etat;
+    });
+
+    // Au retour de Bungie : on regarde si l'adresse contient un code
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get("code");
+    const etat = params.get("state");
+    const statut = document.getElementById("statut");
+
+    if (code) {
+      if (etat === sessionStorage.getItem("etatOAuth")) {
+        statut.textContent = "Code reçu ! Prochaine étape : l'échanger contre un jeton.";
+      } else {
+        statut.textContent = "Erreur : la vérification de sécurité a échoué.";
+      }
+    }
+  </script>
+</body>
+</html>
