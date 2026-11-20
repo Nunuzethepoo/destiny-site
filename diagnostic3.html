@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Diagnostic 3</title>
+</head>
+<body>
+  <h1>Diagnostic 3 (lecture seule)</h1>
+  <button id="lancer">Lancer</button>
+  <pre id="journal" style="white-space: pre-wrap"></pre>
+  <p><a href="profil.html">Retour au profil</a></p>
+
+  <script>
+    const CLE_API = "8f0fe7144bbc4fdda21ed3a26889aecb";
+    const LANGUE = "fr";
+    const NOM = "Cage de l'écho descendant";
+    const jeton = sessionStorage.getItem("jeton");
+    const journal = document.getElementById("journal");
+
+    function ecrire(texte) {
+      journal.textContent += texte + "\n";
+    }
+
+    async function appelerBungie(chemin) {
+      const reponse = await fetch("https://www.bungie.net/Platform" + chemin, {
+        headers: { "X-API-Key": CLE_API, "Authorization": "Bearer " + jeton }
+      });
+      const donnees = await reponse.json();
+      if (donnees.ErrorStatus !== "Success") {
+        throw new Error(donnees.ErrorStatus + " - " + donnees.Message);
+      }
+      return donnees.Response;
+    }
+
+    document.getElementById("lancer").addEventListener("click", async function () {
+      journal.textContent = "";
+      try {
+        const manifest = await appelerBungie("/Destiny2/Manifest/");
+        const chemins = manifest.jsonWorldComponentContentPaths[LANGUE];
+        const reponse = await fetch("https://www.bungie.net" + chemins.DestinyInventoryItemLiteDefinition);
+        const lite = await reponse.json();
+
+        const hashs = Object.keys(lite).filter(function (h) {
+          return lite[h].itemType === 2 && lite[h].displayProperties.name === NOM;
+        });
+        ecrire("Versions trouvées de « " + NOM + " » : " + hashs.join(", "));
+        if (hashs.length === 0) { return; }
+
+        const def = await appelerBungie("/Destiny2/Manifest/DestinyInventoryItemDefinition/" + hashs[0] + "/");
+        ecrire("\nChamps de la définition : " + Object.keys(def).join(", "));
+
+        ecrire("\nChamps courts :");
+        for (const cle of Object.keys(def)) {
+          const texte = JSON.stringify(def[cle]);
+          if (texte && texte.length < 250) {
+            ecrire("  " + cle + " = " + texte);
+          }
+        }
+
+        function nomLite(hash) {
+          return lite[hash] && lite[hash].displayProperties ? lite[hash].displayProperties.name : "?";
+        }
+
+        ecrire("\nPrises par défaut :");
+        (def.sockets.socketEntries || []).forEach(function (e, i) {
+          ecrire("  " + i + " : " + nomLite(e.singleInitialItemHash) + " (" + e.singleInitialItemHash + ")");
+        });
+
+        ecrire("\nPrises intrinsèques :");
+        (def.sockets.intrinsicSockets || []).forEach(function (e, i) {
+          ecrire("  " + i + " : " + nomLite(e.defaultVisualPlugHash || e.plugItemHash) + " " + JSON.stringify(e).slice(0, 200));
+        });
+
+        ecrire("\nTerminé.");
+      } catch (erreur) {
+        ecrire("Erreur : " + erreur.message);
+      }
+    });
+  </script>
+</body>
+</html>
