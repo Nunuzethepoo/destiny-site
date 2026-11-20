@@ -1,0 +1,818 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Destiny 2 - Build Creator</title>
+
+<style>
+:root {
+  --bg: #10141d;
+  --panel: #1b2230;
+  --panel2: #252e3e;
+  --gold: #d9ad50;
+  --text: #f2f3f5;
+  --muted: #a3adbd;
+  --border: #394354;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, sans-serif;
+}
+header {
+  padding: 30px 20px;
+  text-align: center;
+  background: linear-gradient(120deg,#151c29,#343c4b);
+  border-bottom: 2px solid var(--gold);
+}
+header h1 {
+  color: var(--gold);
+  letter-spacing: 3px;
+  margin: 0 0 10px;
+}
+header p { color: var(--muted); }
+.container {
+  max-width: 1200px;
+  margin: auto;
+  padding: 22px;
+}
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+button, .tab {
+  cursor: pointer;
+  border: 0;
+  border-radius: 5px;
+  padding: 12px 17px;
+  font-weight: bold;
+}
+.tab {
+  background: var(--panel2);
+  color: white;
+}
+.tab.active, .primary {
+  background: var(--gold);
+  color: #151515;
+}
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  padding: 20px;
+  border-radius: 9px;
+  margin-bottom: 20px;
+}
+h2 { color: var(--gold); margin-top: 0; }
+h3 { color: var(--gold); }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(220px,1fr));
+  gap: 15px;
+}
+label {
+  display: block;
+  color: var(--muted);
+  font-size: 13px;
+  margin-bottom: 7px;
+}
+.field { margin-bottom: 15px; }
+input, select, textarea {
+  width: 100%;
+  padding: 12px;
+  color: white;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+textarea { min-height: 120px; resize: vertical; }
+button.secondary {
+  background: var(--panel2);
+  color: white;
+  border: 1px solid var(--border);
+}
+button.danger {
+  background: #873e43;
+  color: white;
+}
+button:hover { filter: brightness(1.12); }
+.full { width: 100%; margin-top: 10px; }
+.result {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(190px,1fr));
+  gap: 12px;
+}
+.item {
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  padding: 15px;
+  border-radius: 7px;
+  min-height: 90px;
+}
+.item strong { display: block; margin-bottom: 8px; }
+.small { color: var(--muted); font-size: 12px; }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(90px,1fr));
+  gap: 10px;
+}
+.stat {
+  text-align: center;
+  padding: 12px;
+  background: var(--panel2);
+  border-radius: 6px;
+}
+.stat strong {
+  display: block;
+  color: var(--gold);
+  font-size: 22px;
+}
+.hidden { display: none; }
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 15px;
+}
+.notice {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+@media(max-width:600px) {
+  .container { padding: 12px; }
+  .panel { padding: 14px; }
+  header h1 { font-size: 22px; }
+}
+</style>
+</head>
+
+<body>
+
+<header>
+  <h1>DESTINY 2</h1>
+  <p>BUILD CREATOR • PERSONNALISE TON GARDIEN</p>
+</header>
+
+<main class="container">
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="creator">Créer un build</button>
+    <button class="tab" data-tab="database">Base de données</button>
+    <button class="tab" data-tab="saved">Mes builds</button>
+  </nav>
+
+  <!-- CREATOR -->
+  <section id="creator" class="tab-content">
+
+    <div class="panel">
+      <h2>Configuration du build</h2>
+
+      <div class="grid">
+        <div class="field">
+          <label>Mode de création</label>
+          <select id="mode">
+            <option value="auto">Automatique</option>
+            <option value="manual">Manuel</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Classe</label>
+          <select id="class">
+            <option>Titan</option>
+            <option>Chasseur</option>
+            <option>Arcaniste</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Doctrine</label>
+          <select id="subclass">
+            <option>Solaire</option>
+            <option>Abyssale</option>
+            <option>Cryo-électrique</option>
+            <option>Filobscur</option>
+            <option>Prismatique</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Activité</label>
+          <select id="activity">
+            <option>PvE</option>
+            <option>PvP</option>
+            <option>Raid</option>
+            <option>Donjon</option>
+            <option>Assaut</option>
+            <option>Grand-maître</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Nom du build</label>
+        <input id="buildName" placeholder="Ex : Titan solaire DPS">
+      </div>
+    </div>
+
+    <div class="panel" id="manualPanel">
+      <h2>Équipements manuels</h2>
+      <p class="notice">
+        Choisis les équipements présents dans ta base de données.
+      </p>
+      <div id="manualSlots" class="grid"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Aspects, fragments et mods</h2>
+
+      <div class="grid">
+        <div class="field">
+          <label>Aspect 1</label>
+          <input id="aspect1" placeholder="Nom de l'aspect">
+        </div>
+        <div class="field">
+          <label>Aspect 2</label>
+          <input id="aspect2" placeholder="Nom de l'aspect">
+        </div>
+        <div class="field">
+          <label>Fragments</label>
+          <textarea id="fragments" placeholder="Un fragment par ligne"></textarea>
+        </div>
+        <div class="field">
+          <label>Mods d'armure</label>
+          <textarea id="mods" placeholder="Un mod par ligne"></textarea>
+        </div>
+      </div>
+
+      <button class="primary full" onclick="generateBuild()">
+        GÉNÉRER MON BUILD
+      </button>
+    </div>
+
+    <div class="panel">
+      <h2>Résultat du build</h2>
+      <div id="output" class="notice">
+        Configure ton build puis clique sur Générer.
+      </div>
+
+      <div class="actions">
+        <button class="secondary" onclick="saveBuild()">Sauvegarder</button>
+        <button class="secondary" onclick="copyBuild()">Copier</button>
+        <button class="secondary" onclick="exportBuild()">Exporter JSON</button>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- DATABASE -->
+  <section id="database" class="tab-content hidden">
+
+    <div class="panel">
+      <h2>Base de données personnalisée</h2>
+      <p class="notice">
+        Ajoute tes propres équipements. Les exemples fournis sont
+        uniquement des données de démonstration, pas un catalogue
+        officiel ou exhaustif du jeu.
+      </p>
+
+      <div class="grid">
+        <div class="field">
+          <label>Nom de l'équipement</label>
+          <input id="newName" placeholder="Nom de l'objet">
+        </div>
+        <div class="field">
+          <label>Type</label>
+          <select id="newType">
+            <option value="weapon">Arme</option>
+            <option value="armor">Armure</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Emplacement</label>
+          <select id="newSlot">
+            <option value="Kinetic">Cinétique</option>
+            <option value="Energy">Énergie</option>
+            <option value="Power">Puissance</option>
+            <option value="Helmet">Casque</option>
+            <option value="Arms">Gantelets</option>
+            <option value="Chest">Torse</option>
+            <option value="Legs">Jambières</option>
+            <option value="ClassItem">Objet de classe</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Exotique ?</label>
+          <select id="newExotic">
+            <option value="false">Non</option>
+            <option value="true">Oui</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Classe compatible</label>
+          <select id="newClass">
+            <option value="all">Toutes</option>
+            <option>Titan</option>
+            <option>Chasseur</option>
+            <option>Arcaniste</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Doctrine compatible</label>
+          <select id="newSubclass">
+            <option value="all">Toutes</option>
+            <option>Solaire</option>
+            <option>Abyssale</option>
+            <option>Cryo-électrique</option>
+            <option>Filobscur</option>
+            <option>Prismatique</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Activité compatible</label>
+          <select id="newActivity">
+            <option value="all">Toutes</option>
+            <option>PvE</option>
+            <option>PvP</option>
+            <option>Raid</option>
+            <option>Donjon</option>
+            <option>Assaut</option>
+            <option>Grand-maître</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Tags (séparés par des virgules)</label>
+          <input id="newTags" placeholder="DPS, grenade, solaire">
+        </div>
+      </div>
+
+      <button class="primary full" onclick="addItem()">
+        AJOUTER À LA BASE
+      </button>
+    </div>
+
+    <div class="panel">
+      <h2>Importer / Exporter la base</h2>
+      <textarea id="databaseJSON" placeholder="Colle ici un fichier JSON de base de données..."></textarea>
+      <div class="actions">
+        <button class="secondary" onclick="exportDatabase()">Exporter la base</button>
+        <button class="secondary" onclick="importDatabase()">Importer la base</button>
+        <button class="danger" onclick="resetDatabase()">Réinitialiser</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Équipements enregistrés (<span id="itemCount">0</span>)</h2>
+      <div id="databaseList"></div>
+    </div>
+
+  </section>
+
+  <!-- SAVED BUILDS -->
+  <section id="saved" class="tab-content hidden">
+    <div class="panel">
+      <h2>Mes builds sauvegardés</h2>
+      <div id="savedList"></div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+
+// ========================================
+// CONFIGURATION ET DONNÉES
+// ========================================
+
+const STORAGE_DB = "d2_builder_database_v1";
+const STORAGE_BUILDS = "d2_builder_builds_v1";
+
+const slots = [
+  ["Kinetic","Arme cinétique"],
+  ["Energy","Arme énergie"],
+  ["Power","Arme puissance"],
+  ["Helmet","Casque"],
+  ["Arms","Gantelets"],
+  ["Chest","Torse"],
+  ["Legs","Jambières"],
+  ["ClassItem","Objet de classe"]
+];
+
+const starterDatabase = [
+  {id:"w1",name:"Exemple : arme cinétique",type:"weapon",slot:"Kinetic",exotic:false,class:"all",subclass:"all",activity:"all",tags:["DPS","PvE"]},
+  {id:"w2",name:"Exemple : arme énergie",type:"weapon",slot:"Energy",exotic:false,class:"all",subclass:"all",activity:"all",tags:["Add-clear"]},
+  {id:"w3",name:"Exemple : arme lourde",type:"weapon",slot:"Power",exotic:false,class:"all",subclass:"all",activity:"all",tags:["DPS","Boss"]},
+  {id:"a1",name:"Exemple : exotique Titan",type:"armor",slot:"Helmet",exotic:true,class:"Titan",subclass:"all",activity:"all",tags:["DPS"]},
+  {id:"a2",name:"Exemple : exotique Chasseur",type:"armor",slot:"Arms",exotic:true,class:"Chasseur",subclass:"all",activity:"all",tags:["DPS"]},
+  {id:"a3",name:"Exemple : exotique Arcaniste",type:"armor",slot:"Chest",exotic:true,class:"Arcaniste",subclass:"all",activity:"all",tags:["Grenade"]},
+  {id:"a4",name:"Exemple : armure de jambes",type:"armor",slot:"Legs",exotic:false,class:"all",subclass:"all",activity:"all",tags:["Survie"]},
+  {id:"a5",name:"Exemple : objet de classe",type:"armor",slot:"ClassItem",exotic:false,class:"all",subclass:"all",activity:"all",tags:["Support"]}
+];
+
+let database = loadJSON(STORAGE_DB,starterDatabase);
+let savedBuilds = loadJSON(STORAGE_BUILDS,[]);
+let currentBuild = null;
+
+function loadJSON(key,fallback) {
+  try {
+    const value = localStorage.getItem(key);
+    return value ? JSON.parse(value) : structuredClone(fallback);
+  } catch(e) {
+    return structuredClone(fallback);
+  }
+}
+
+function saveDatabase() {
+  localStorage.setItem(STORAGE_DB,JSON.stringify(database));
+}
+
+function saveBuilds() {
+  localStorage.setItem(STORAGE_BUILDS,JSON.stringify(savedBuilds));
+}
+
+function escapeHTML(value) {
+  return String(value ?? "").replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",
+    '"':"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function notify(message) {
+  alert(message);
+}
+
+// ========================================
+// NAVIGATION
+// ========================================
+
+document.querySelectorAll(".tab").forEach(button => {
+  button.addEventListener("click",() => {
+    document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
+    document.querySelectorAll(".tab-content").forEach(p=>p.classList.add("hidden"));
+    button.classList.add("active");
+    document.getElementById(button.dataset.tab).classList.remove("hidden");
+    if(button.dataset.tab === "database") renderDatabase();
+    if(button.dataset.tab === "saved") renderSaved();
+  });
+});
+
+// ========================================
+// MODE MANUEL
+// ========================================
+
+function renderManualSlots() {
+  const container = document.getElementById("manualSlots");
+  container.innerHTML = "";
+
+  slots.forEach(([slot,label]) => {
+    const field = document.createElement("div");
+    field.className = "field";
+    const select = document.createElement("select");
+    select.id = "slot_"+slot;
+
+    const empty = document.createElement("option");
+    empty.value = "";
+    empty.textContent = "Aucun équipement";
+    select.appendChild(empty);
+
+    database.filter(item=>item.slot===slot).forEach(item=>{
+      const option = document.createElement("option");
+      option.value = item.id;
+      option.textContent = item.name + (item.exotic ? " ★" : "");
+      select.appendChild(option);
+    });
+
+    const title = document.createElement("label");
+    title.textContent = label;
+    field.append(title,select);
+    container.appendChild(field);
+  });
+}
+
+document.getElementById("mode").addEventListener("change",e=>{
+  document.getElementById("manualPanel").classList.toggle(
+    "hidden",e.target.value==="auto"
+  );
+});
+
+// ========================================
+// COMPATIBILITÉ ET GÉNÉRATION
+// ========================================
+
+function compatible(item,classe,doctrine,activite) {
+  return (
+    (item.class==="all" || item.class===classe) &&
+    (item.subclass==="all" || item.subclass===doctrine) &&
+    (item.activity==="all" || item.activity===activite)
+  );
+}
+
+function scoreItem(item,doctrine,activite) {
+  let score = 1;
+  const tags = (item.tags || []).map(t=>t.toLowerCase());
+
+  if(tags.includes("dps")) score += 5;
+  if(tags.includes("survie")) score += activite==="Grand-maître" ? 6 : 2;
+  if(tags.includes("support")) score += 3;
+  if(tags.includes("add-clear")) score += 4;
+  if(tags.includes("boss") && ["Raid","Donjon"].includes(activite)) score += 5;
+  if(tags.includes("pvp") && activite==="PvP") score += 8;
+  if(tags.includes("grenade")) score += 2;
+
+  if(tags.includes(doctrine.toLowerCase())) score += 8;
+  if(item.exotic) score += 2;
+
+  return score;
+}
+
+function chooseEquipment(slot,classe,doctrine,activite,usedExotic) {
+  const candidates = database.filter(item=>
+    item.slot===slot &&
+    compatible(item,classe,doctrine,activite) &&
+    (!item.exotic || !usedExotic[item.type])
+  );
+
+  candidates.sort((a,b)=>
+    scoreItem(b,doctrine,activite)-scoreItem(a,doctrine,activite)
+  );
+
+  const selected = candidates[0] || null;
+  if(selected && selected.exotic) {
+  usedExotic[selected.type] = true;
+}
+  return selected;
+}
+
+function generateBuild() {
+  const mode = document.getElementById("mode").value;
+  const classe = document.getElementById("class").value;
+  const doctrine = document.getElementById("subclass").value;
+  const activite = document.getElementById("activity").value;
+
+  const build = {
+    name:document.getElementById("buildName").value || "Mon build",
+    mode,classe,doctrine,activite,
+    equipment:[],
+    aspects:[
+      document.getElementById("aspect1").value,
+      document.getElementById("aspect2").value
+    ],
+    fragments:document.getElementById("fragments").value.split("\n").filter(Boolean),
+    mods:document.getElementById("mods").value.split("\n").filter(Boolean),
+    date:new Date().toISOString()
+  };
+
+  if(mode==="manual") {
+    slots.forEach(([slot])=>{
+      const id = document.getElementById("slot_"+slot)?.value;
+      const item = database.find(i=>i.id===id);
+      if(item && compatible(item,classe,doctrine,activite)) {
+        build.equipment.push(item);
+      }
+    });
+
+    const exoticCount = build.equipment.filter(i=>i.exotic).length;
+    if(exoticCount>1) {
+      notify("Attention : plusieurs exotiques sont sélectionnés. Vérifie les restrictions d'équipement.");
+    }
+  } else {
+    const usedExotic = {
+  weapon: false,
+  armor: false
+};
+
+    slots.forEach(([slot])=>{
+      const item = chooseEquipment(slot,classe,doctrine,activite,usedExotic);
+      if(item) build.equipment.push(item);
+    });
+  }
+
+  currentBuild = build;
+  renderBuild(build);
+}
+
+function renderBuild(build) {
+  const container = document.getElementById("output");
+  const equipment = build.equipment.map(item=>`
+    <div class="item">
+      <strong>${escapeHTML(item.name)}</strong>
+      <span class="small">
+        ${escapeHTML(item.slot)} ${item.exotic ? " • EXOTIQUE" : ""}
+      </span>
+    </div>
+  `).join("");
+
+  container.innerHTML = `
+    <h3>${escapeHTML(build.name)}</h3>
+    <p>${escapeHTML(build.classe)} • ${escapeHTML(build.doctrine)} • ${escapeHTML(build.activite)}</p>
+    <h3>Équipements</h3>
+    <div class="result">${equipment || "Aucun équipement disponible."}</div>
+    <h3>Aspects</h3>
+    <p>${build.aspects.map(escapeHTML).filter(Boolean).join(" / ") || "Non définis"}</p>
+    <h3>Fragments</h3>
+    <p>${build.fragments.map(escapeHTML).join(" • ") || "Non définis"}</p>
+    <h3>Mods</h3>
+    <p>${build.mods.map(escapeHTML).join(" • ") || "Non définis"}</p>
+    <p class="notice">Les équipements affichés proviennent de ta base locale. Vérifie leur disponibilité et leur compatibilité en jeu.</p>
+  `;
+}
+
+// ========================================
+// BASE DE DONNÉES
+// ========================================
+
+function addItem() {
+  const name = document.getElementById("newName").value.trim();
+  if(!name) return notify("Entre un nom d'équipement.");
+
+  const item = {
+    id:crypto.randomUUID(),
+    name,
+    type:document.getElementById("newType").value,
+    slot:document.getElementById("newSlot").value,
+    exotic:document.getElementById("newExotic").value==="true",
+    class:document.getElementById("newClass").value,
+    subclass:document.getElementById("newSubclass").value,
+    activity:document.getElementById("newActivity").value,
+    tags:document.getElementById("newTags").value.split(",").map(t=>t.trim()).filter(Boolean)
+  };
+
+  database.push(item);
+  saveDatabase();
+  renderDatabase();
+  renderManualSlots();
+  document.getElementById("newName").value="";
+  document.getElementById("newTags").value="";
+  notify("Équipement ajouté !");
+}
+
+function renderDatabase() {
+  document.getElementById("itemCount").textContent=database.length;
+  document.getElementById("databaseList").innerHTML=database.map(item=>`
+    <div class="item" style="margin-bottom:8px">
+      <strong>${escapeHTML(item.name)}</strong>
+      <span class="small">${escapeHTML(item.slot)} • ${item.exotic?"Exotique":"Légendaire/Autre"} • ${escapeHTML(item.class)}</span>
+      <button class="danger" style="margin-top:8px"
+        onclick="deleteItem('${escapeHTML(item.id)}')">Supprimer</button>
+    </div>
+  `).join("") || "Base vide.";
+}
+
+function deleteItem(id) {
+  if(!confirm("Supprimer cet équipement ?")) return;
+  database=database.filter(i=>i.id!==id);
+  saveDatabase();
+  renderDatabase();
+  renderManualSlots();
+}
+
+function exportDatabase() {
+  document.getElementById("databaseJSON").value=JSON.stringify(database,null,2);
+}
+
+function importDatabase() {
+  try {
+    const data=JSON.parse(document.getElementById("databaseJSON").value);
+    if(!Array.isArray(data)) throw Error("La base doit être un tableau.");
+    const valid = data.every(item=>
+      item && typeof item.name==="string" &&
+      ["weapon","armor"].includes(item.type) &&
+      slots.some(s=>s[0]===item.slot) &&
+      typeof item.exotic==="boolean" &&
+      typeof item.id==="string" &&
+      typeof item.class==="string" &&
+      typeof item.subclass==="string" &&
+      typeof item.activity==="string" &&
+      Array.isArray(item.tags)
+    );
+    if(!valid) throw Error("Format d'équipement invalide.");
+    database=data;
+    saveDatabase();
+    renderDatabase();
+    renderManualSlots();
+    notify("Base importée !");
+  } catch(e) {
+    notify("Erreur d'import : "+e.message);
+  }
+}
+
+function resetDatabase() {
+  if(!confirm("Remplacer toute ta base par les exemples de départ ?")) return;
+  database=structuredClone(starterDatabase);
+  saveDatabase();
+  renderDatabase();
+  renderManualSlots();
+}
+
+// ========================================
+// SAUVEGARDE DES BUILDS
+// ========================================
+
+function saveBuild() {
+  if(!currentBuild) return notify("Génère d'abord un build.");
+  const copy=JSON.parse(JSON.stringify(currentBuild));
+  copy.id=crypto.randomUUID();
+  savedBuilds.push(copy);
+  saveBuilds();
+  notify("Build sauvegardé !");
+}
+
+function renderSaved() {
+  const container=document.getElementById("savedList");
+  container.innerHTML=savedBuilds.map(build=>`
+    <div class="item" style="margin-bottom:10px">
+      <strong>${escapeHTML(build.name)}</strong>
+      <p class="small">${escapeHTML(build.classe)} • ${escapeHTML(build.doctrine)} • ${escapeHTML(build.activite)}</p>
+      <div class="actions">
+        <button class="secondary" onclick="loadBuild('${escapeHTML(build.id)}')">Charger</button>
+        <button class="danger" onclick="deleteBuild('${escapeHTML(build.id)}')">Supprimer</button>
+      </div>
+    </div>
+  `).join("") || "Aucun build sauvegardé.";
+}
+
+function loadBuild(id) {
+  const build=savedBuilds.find(b=>b.id===id);
+  if(!build) return;
+
+  document.getElementById("buildName").value=build.name;
+  document.getElementById("class").value=build.classe;
+  document.getElementById("subclass").value=build.doctrine;
+  document.getElementById("activity").value=build.activite;
+  document.getElementById("mode").value=build.mode;
+  document.getElementById("aspect1").value=build.aspects[0] || "";
+  document.getElementById("aspect2").value=build.aspects[1] || "";
+  document.getElementById("fragments").value=build.fragments.join("\n");
+  document.getElementById("mods").value=build.mods.join("\n");
+
+  renderManualSlots();
+  build.equipment.forEach(item=>{
+    const select=document.getElementById("slot_"+item.slot);
+    if(select) select.value=item.id;
+  });
+
+  document.getElementById("manualPanel").classList.toggle("hidden",build.mode==="auto");
+  currentBuild=build;
+  renderBuild(build);
+
+  document.querySelector('[data-tab="creator"]').click();
+}
+
+function deleteBuild(id) {
+  if(!confirm("Supprimer ce build ?")) return;
+  savedBuilds=savedBuilds.filter(b=>b.id!==id);
+  saveBuilds();
+  renderSaved();
+}
+
+// ========================================
+// COPIE ET EXPORT
+// ========================================
+
+function buildText() {
+  if(!currentBuild) return "";
+  return JSON.stringify(currentBuild,null,2);
+}
+
+async function copyBuild() {
+  if(!currentBuild) return notify("Aucun build à copier.");
+  try {
+    await navigator.clipboard.writeText(buildText());
+    notify("Build copié !");
+  } catch(e) {
+    notify("Impossible de copier. Utilise Exporter JSON.");
+  }
+}
+
+function downloadJSON(data,filename) {
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement("a");
+  link.href=url;
+  link.download=filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportBuild() {
+  if(!currentBuild) return notify("Génère d'abord un build.");
+  downloadJSON(currentBuild,"destiny2-build.json");
+}
+
+// ========================================
+// INITIALISATION
+// ========================================
+
+renderManualSlots();
+renderDatabase();
+renderSaved();
+
+</script>
+</body>
+</html>
