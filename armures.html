@@ -5,13 +5,29 @@
   <title>Mes armures</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
-    .armure { display: flex; align-items: center; margin: 4px 0; }
-    .armure img { width: 48px; height: 48px; margin-right: 10px; }
+    .armure, .piece { display: flex; align-items: center; margin: 4px 0; }
+    .armure { cursor: pointer; }
+    .armure:hover { background: #eee; }
+    .piece { cursor: pointer; }
+    .armure img, .piece img { width: 48px; height: 48px; margin-right: 10px; }
+    .vide { color: #888; padding-left: 58px; }
     label { margin-right: 16px; }
+    #message { color: #b00020; }
   </style>
 </head>
 <body>
   <h1>Mes armures</h1>
+
+  <h2>Mon set en cours</h2>
+  <div id="set"></div>
+  <input id="nomSet" placeholder="Nom du set">
+  <button id="sauvegarder">Sauvegarder le set</button>
+  <p id="message"></p>
+
+  <h2>Sets sauvegardés</h2>
+  <div id="sauvegardes"></div>
+
+  <h2>Toutes mes armures (clique sur une pièce pour l'ajouter au set)</h2>
   <p id="statut">Chargement...</p>
 
   <div id="filtres" style="display:none">
@@ -39,10 +55,13 @@
     const jeton = sessionStorage.getItem("jeton");
 
     const statut = document.getElementById("statut");
+    const message = document.getElementById("message");
     const zoneFiltres = document.getElementById("filtres");
     const filtreClasse = document.getElementById("filtreClasse");
     const filtreEmplacement = document.getElementById("filtreEmplacement");
     const zoneListe = document.getElementById("liste");
+    const zoneSet = document.getElementById("set");
+    const zoneSauvegardes = document.getElementById("sauvegardes");
 
     const CLASSES = { 0: "Titan", 1: "Chasseur", 2: "Arcaniste", 3: "Autre" };
     const EMPLACEMENTS_ARMURE = {
@@ -52,10 +71,13 @@
       20886954: "Jambes",
       1585787867: "Objet de classe"
     };
+    const ORDRE = ["Casque", "Gants", "Torse", "Jambes", "Objet de classe"];
 
     let toutesLesArmures = [];
+    let monSet = {}; // une pièce par emplacement : { "Casque": armure, ... }
+    let setsSauvegardes = JSON.parse(localStorage.getItem("setsArmures")) || [];
 
-    // On remplit la liste déroulante des emplacements
+    // Liste déroulante des emplacements
     for (const hash in EMPLACEMENTS_ARMURE) {
       const option = document.createElement("option");
       option.value = EMPLACEMENTS_ARMURE[hash];
@@ -77,7 +99,6 @@
       return donnees.Response;
     }
 
-    // Télécharge toutes les définitions d'objets (nom, icône, type...)
     async function chargerDefinitions() {
       const manifest = await appelerBungie("/Destiny2/Manifest/");
       const chemins = manifest.jsonWorldComponentContentPaths[LANGUE];
@@ -88,7 +109,122 @@
       return await reponse.json();
     }
 
-    // Affiche les armures selon les filtres choisis
+    // ---------- Le set en cours ----------
+
+    function ajouterAuSet(armure) {
+      message.textContent = "";
+      const autres = Object.values(monSet).filter(function (a) {
+        return a.emplacement !== armure.emplacement;
+      });
+
+      const autreClasse = autres.some(function (a) {
+        return a.classe !== armure.classe;
+      });
+      if (autreClasse) {
+        message.textContent = "Toutes les pièces d'un set doivent être de la même classe.";
+        return;
+      }
+
+      const autreExotique = autres.some(function (a) {
+        return a.exotique;
+      });
+      if (armure.exotique && autreExotique) {
+        message.textContent = "Un set ne peut contenir qu'une seule pièce exotique.";
+        return;
+      }
+
+      monSet[armure.emplacement] = armure;
+      afficherSet();
+    }
+
+    function afficherSet() {
+      zoneSet.innerHTML = "";
+
+      for (const emplacement of ORDRE) {
+        const armure = monSet[emplacement];
+
+        if (!armure) {
+          const vide = document.createElement("div");
+          vide.className = "vide";
+          vide.textContent = emplacement + " : (vide)";
+          zoneSet.appendChild(vide);
+          continue;
+        }
+
+        const ligne = document.createElement("div");
+        ligne.className = "piece";
+        ligne.title = "Clique pour retirer cette pièce";
+
+        const image = document.createElement("img");
+        image.src = "https://www.bungie.net" + armure.icone;
+        const texte = document.createElement("span");
+        texte.textContent = emplacement + " : " + armure.nom + (armure.exotique ? " (exotique)" : "");
+
+        ligne.appendChild(image);
+        ligne.appendChild(texte);
+        ligne.addEventListener("click", function () {
+          delete monSet[emplacement];
+          afficherSet();
+        });
+        zoneSet.appendChild(ligne);
+      }
+    }
+
+    // ---------- Les sets sauvegardés ----------
+
+    function afficherSauvegardes() {
+      zoneSauvegardes.innerHTML = "";
+
+      if (setsSauvegardes.length === 0) {
+        zoneSauvegardes.textContent = "Aucun set sauvegardé pour l'instant.";
+        return;
+      }
+
+      for (const set of setsSauvegardes) {
+        const ligne = document.createElement("div");
+
+        const boutonCharger = document.createElement("button");
+        boutonCharger.textContent = set.nom + " (" + set.pieces.length + " pièces)";
+        boutonCharger.addEventListener("click", function () {
+          monSet = {};
+          for (const piece of set.pieces) {
+            monSet[piece.emplacement] = piece;
+          }
+          message.textContent = "";
+          afficherSet();
+        });
+
+        const boutonSupprimer = document.createElement("button");
+        boutonSupprimer.textContent = "Supprimer";
+        boutonSupprimer.addEventListener("click", function () {
+          setsSauvegardes.splice(setsSauvegardes.indexOf(set), 1);
+          localStorage.setItem("setsArmures", JSON.stringify(setsSauvegardes));
+          afficherSauvegardes();
+        });
+
+        ligne.appendChild(boutonCharger);
+        ligne.appendChild(boutonSupprimer);
+        zoneSauvegardes.appendChild(ligne);
+      }
+    }
+
+    document.getElementById("sauvegarder").addEventListener("click", function () {
+      const nom = document.getElementById("nomSet").value.trim();
+      const pieces = Object.values(monSet);
+
+      if (nom === "" || pieces.length === 0) {
+        message.textContent = "Donne un nom au set et choisis au moins une pièce.";
+        return;
+      }
+
+      setsSauvegardes.push({ nom: nom, pieces: pieces });
+      localStorage.setItem("setsArmures", JSON.stringify(setsSauvegardes));
+      message.textContent = "";
+      afficherSauvegardes();
+    });
+
+    // ---------- La liste de toutes les armures ----------
+
     function afficher() {
       const classe = filtreClasse.value;
       const emplacement = filtreEmplacement.value;
@@ -111,10 +247,14 @@
 
         const texte = document.createElement("span");
         texte.textContent =
-          armure.nom + " (" + armure.emplacement + ", " + CLASSES[armure.classe] + ") - " + armure.lieu;
+          armure.nom + (armure.exotique ? " (exotique)" : "") +
+          " - " + armure.emplacement + ", " + CLASSES[armure.classe] + " - " + armure.lieu;
 
         ligne.appendChild(image);
         ligne.appendChild(texte);
+        ligne.addEventListener("click", function () {
+          ajouterAuSet(armure);
+        });
         zoneListe.appendChild(ligne);
       }
     }
@@ -129,7 +269,6 @@
       }
 
       try {
-        // 1. Mon compte Destiny
         statut.textContent = "Recherche de ton compte...";
         let memberships;
         try {
@@ -143,13 +282,11 @@
             return m.membershipId === memberships.primaryMembershipId;
           }) || memberships.destinyMemberships[0];
 
-        // 2. Coffre (102), inventaires des personnages (201), équipement (205)
         statut.textContent = "Chargement de ton inventaire...";
         const profil = await appelerBungie(
           "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId + "/?components=102,201,205"
         );
 
-        // 3. Tous les objets, avec leur lieu
         const objets = [];
         function ajouter(liste, lieu) {
           for (const objet of liste) {
@@ -171,14 +308,13 @@
           }
         }
 
-        // 4. On traduit chaque objet grâce aux définitions, et on garde l'armure
         statut.textContent = "Téléchargement des définitions...";
         const definitions = await chargerDefinitions();
 
         for (const element of objets) {
           const definition = definitions[element.objet.itemHash];
           if (!definition || definition.itemType !== 2 || !definition.inventory) {
-            continue; // pas de définition, ou ce n'est pas de l'armure
+            continue;
           }
           const emplacement = EMPLACEMENTS_ARMURE[definition.inventory.bucketTypeHash];
           if (!emplacement) {
@@ -189,8 +325,10 @@
             icone: definition.displayProperties.icon,
             emplacement: emplacement,
             classe: definition.classType,
+            exotique: definition.inventory.tierType === 6,
             lieu: element.lieu,
-            idInstance: element.objet.itemInstanceId
+            idInstance: element.objet.itemInstanceId,
+            hash: element.objet.itemHash
           });
         }
 
@@ -205,6 +343,8 @@
       }
     }
 
+    afficherSet();
+    afficherSauvegardes();
     charger();
   </script>
 </body>
