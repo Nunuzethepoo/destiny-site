@@ -439,6 +439,11 @@
         toutesLesArmures.sort(function (a, b) {
           return a.emplacement.localeCompare(b.emplacement) || a.nom.localeCompare(b.nom);
         });
+        // Synchronisation avec le Build Creator
+localStorage.setItem(
+  "d2InventaireArmures",
+  JSON.stringify(toutesLesArmures)
+);
 
         zoneFiltres.style.display = "block";
         afficher();
