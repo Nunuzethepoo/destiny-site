@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Diagnostic</title>
+</head>
+<body>
+  <h1>Diagnostic (lecture seule)</h1>
+  <button id="lancer">Lancer le diagnostic</button>
+  <pre id="journal" style="white-space: pre-wrap"></pre>
+  <p><a href="profil.html">Retour au profil</a></p>
+
+  <script>
+    const CLE_API = "8f0fe7144bbc4fdda21ed3a26889aecb";
+    const LANGUE = "fr";
+    const jeton = sessionStorage.getItem("jeton");
+    const journal = document.getElementById("journal");
+
+    function ecrire(texte) {
+      journal.textContent += texte + "\n";
+    }
+
+    async function appelerBungie(chemin) {
+      const reponse = await fetch("https://www.bungie.net/Platform" + chemin, {
+        headers: { "X-API-Key": CLE_API, "Authorization": "Bearer " + jeton }
+      });
+      const donnees = await reponse.json();
+      if (donnees.ErrorStatus !== "Success") {
+        throw new Error(donnees.ErrorStatus + " - " + donnees.Message);
+      }
+      return donnees.Response;
+    }
+
+    async function diagnostic() {
+      journal.textContent = "";
+      if (!jeton) {
+        ecrire("Tu n'es pas connecté : repasse par la page de connexion.");
+        return;
+      }
+
+      try {
+        // 1. Quelles définitions existent ?
+        const manifest = await appelerBungie("/Destiny2/Manifest/");
+        const chemins = manifest.jsonWorldComponentContentPaths[LANGUE];
+        const noms = Object.keys(chemins).filter(function (nom) {
+          return /Set|Plug|Socket|Loadout/.test(nom);
+        });
+        ecrire("Définitions liées aux sets, plugs et sockets :\n  " + noms.join("\n  "));
+
+        // 2. Les définitions complètes d'objets : taille et durée
+        ecrire("\nTéléchargement des définitions complètes (patience)...");
+        const debut = Date.now();
+        const reponse = await fetch("https://www.bungie.net" + chemins.DestinyInventoryItemDefinition);
+        const texte = await reponse.text();
+        const defs = JSON.parse(texte);
+        const secondes = ((Date.now() - debut) / 1000).toFixed(1);
+        ecrire("Taille : " + (texte.length / 1048576).toFixed(1) + " Mo, durée : " + secondes + " s");
+
+        // 3. Mon compte, un personnage, et son casque équipé
+        let memberships;
+        try {
+          memberships = await appelerBungie("/User/GetMembershipsForCurrentUser/");
+        } catch (erreur) {
+          const membershipId = sessionStorage.getItem("membershipId");
+          memberships = await appelerBungie("/User/GetMembershipsById/" + membershipId + "/-1/");
+        }
+        const compte =
+          memberships.destinyMemberships.find(function (m) {
+            return m.membershipId === memberships.primaryMembershipId;
+          }) || memberships.destinyMemberships[0];
+
+        const profil = await appelerBungie(
+          "/Destiny2/" + compte.membershipType + "/Profile/" + compte.membershipId +
+          "/?components=200,205,305"
+        );
+
+        const idPerso = Object.keys(profil.characters.data)[0];
+        const equipement = profil.characterEquipment.data[idPerso].items;
+        const casque = equipement.find(function (objet) {
+          return objet.bucketHash === 3448274439;
+        });
+        const def = defs[casque.itemHash];
+
+        ecrire("\nPièce testée : " + def.displayProperties.name);
+        ecrire("Champ equipableItemSetHash : " + def.equipableItemSetHash);
+
+        // 4. Le set de la pièce, s'il existe
+        if (def.equipableItemSetHash && chemins.DestinyEquipableItemSetDefinition) {
+          const reponseSets = await fetch("https://www.bungie.net" + chemins.DestinyEquipableItemSetDefinition);
+          const sets = await reponseSets.json();
+          const set = sets[def.equipableItemSetHash];
+          ecrire("Définition du set : " + JSON.stringify(set).slice(0, 1200));
+        } else {
+          ecrire("Pas de définition de set trouvée par ce chemin.");
+        }
+
+        // 5. Les prises (sockets) de la pièce et ce qu'elles contiennent
+        const prises = profil.itemComponents.sockets.data[casque.itemInstanceId].sockets;
+        ecrire("\nPrises de la pièce (" + prises.length + ") :");
+        prises.forEach(function (prise, index) {
+          const plug = prise.plugHash ? defs[prise.plugHash] : null;
+          if (!plug) {
+            ecrire("  Prise " + index + " : vide");
+            return;
+          }
+          const infosPlug = plug.plug || {};
+          const energie = infosPlug.energyCost ? infosPlug.energyCost.energyCost : "-";
+          ecrire(
+            "  Prise " + index + " : " + plug.displayProperties.name +
+            " | catégorie : " + infosPlug.plugCategoryIdentifier +
+            " | énergie : " + energie
+          );
+        });
+
+        ecrire("\nTerminé.");
+      } catch (erreur) {
+        ecrire("Erreur : " + erreur.message);
+      }
+    }
+
+    document.getElementById("lancer").addEventListener("click", diagnostic);
+  </script>
+</body>
+</html>
